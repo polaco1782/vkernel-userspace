@@ -1,0 +1,33 @@
+# Build outputs
+*.a
+*.d
+*.dll
+*.exe
+*.lib
+*.o
+*.obj
+*.vbin
+
+# Generated runtime state
+newlib/
+newlib-build/
+sysroot/
+
+# Program-specific generated files
+cpp/libvkcpp.a
+cpp/runtime/*.o
+doom/obj/
+libc/*.a
+libc/*.o
+quake/obj/
+vgui/imgui/
+vgui/implot/
+vnes/build/
+
+# Local content that should not be committed
+clownmdemu/roms/
+doom/doom1.wad
+doom/doom2.wad
+minimp3/tracks/
+quake/pak0.pak
+vnes/roms/
