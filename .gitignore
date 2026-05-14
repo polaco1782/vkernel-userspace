@@ -20,6 +20,7 @@ doom/obj/
 libc/*.a
 libc/*.o
 quake/obj/
+quake-src/src/memory/
 vgui/imgui/
 vgui/implot/
 vnes/build/
