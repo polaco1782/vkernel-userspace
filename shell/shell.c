@@ -19,28 +19,24 @@
 #define SHELL_PROMPT "vk> "
 #define SHELL_HISTORY_MAX 8
 #define SHELL_LINE_MAX 256
+#define SHELL_PATH_MAX 256
+#define SHELL_FS_RESPONSE_MAX 4096
+#define SHELL_FS_ITEMS_MAX 64
+#define SHELL_FS_ITEM_MAX 96
+
+#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
 
 static const char* SHELL_COMMANDS[] = {
     "help",
     "version",
-    "mem",
-    "tasks",
-    "top",
+    "pwd",
+    "cd",
     "ls",
-    "get",
-    "set",
-    "watch",
-    "describe",
     "cat",
     "clear",
-    "uptime",
     "reboot",
-    "idt",
-    "alloc",
     "run",
     "drvload",
-    "drvunload",
-    "panic",
     "exit",
     VK_NULL,
 };
@@ -356,367 +352,378 @@ static vk_usize console_getline(char* buf, vk_usize max, const char* prompt)
 }
 
 /* -------------------------------------------------------------------------
- * Command implementations
+ * Shell paths and filesystem helpers
  * ---------------------------------------------------------------------- */
+
+static char s_root_path[SHELL_PATH_MAX] = "/";
+static char s_cwd[SHELL_PATH_MAX] = "/";
+
+static int shell_is_separator(char ch)
+{
+    return ch == '/' || ch == '\\';
+}
+
+static int shell_path_has_spaces(const char* path)
+{
+    while (*path != '\0') {
+        if (*path == ' ' || *path == '\t')
+            return 1;
+        ++path;
+    }
+    return 0;
+}
+
+static const char* shell_basename(const char* path)
+{
+    const char* base = path;
+
+    while (*path != '\0') {
+        if (shell_is_separator(*path))
+            base = path + 1;
+        ++path;
+    }
+
+    return base;
+}
+
+static int shell_normalize_absolute_path(const char* path, char* out, vk_usize out_cap)
+{
+    vk_usize component_starts[32];
+    vk_usize component_count = 0;
+    vk_usize out_len = 1;
+
+    if (path == VK_NULL || out == VK_NULL || out_cap < 2)
+        return 0;
+
+    out[0] = '/';
+    out[1] = '\0';
+
+    while (*path != '\0') {
+        char component[64];
+        vk_usize component_len = 0;
+        vk_usize start = 0;
+
+        while (shell_is_separator(*path))
+            ++path;
+        if (*path == '\0')
+            break;
+
+        while (*path != '\0' && !shell_is_separator(*path)) {
+            if (component_len + 1 >= sizeof(component))
+                return 0;
+            component[component_len++] = *path++;
+        }
+        component[component_len] = '\0';
+
+        if (component_len == 1 && component[0] == '.')
+            continue;
+
+        if (component_len == 2 && component[0] == '.' && component[1] == '.') {
+            if (component_count > 0) {
+                start = component_starts[--component_count];
+                out_len = start > 1 ? start - 1 : 1;
+                out[out_len] = '\0';
+            }
+            continue;
+        }
+
+        if (component_count >= ARRAY_LEN(component_starts))
+            return 0;
+
+        if (out_len > 1) {
+            if (out_len + 1 >= out_cap)
+                return 0;
+            out[out_len++] = '/';
+        }
+
+        start = out_len;
+        if (out_len + component_len >= out_cap)
+            return 0;
+
+        for (vk_usize i = 0; i < component_len; ++i)
+            out[out_len++] = component[i];
+        out[out_len] = '\0';
+        component_starts[component_count++] = start;
+    }
+
+    return 1;
+}
+
+static int shell_resolve_path_from(const char* base,
+                                   const char* raw,
+                                   char* out,
+                                   vk_usize out_cap)
+{
+    char combined[SHELL_PATH_MAX];
+    const char* input = vk_skip_spaces(raw ? raw : "");
+
+    if (*input == '\0') {
+        shell_copy_line(out, out_cap, base);
+        return 1;
+    }
+
+    if (shell_is_separator(*input))
+        return shell_normalize_absolute_path(input, out, out_cap);
+
+    vk_usize pos = 0;
+    if (vk_strcmp(base, "/") == 0) {
+        combined[pos++] = '/';
+    } else {
+        while (base[pos] != '\0') {
+            if (pos + 1 >= sizeof(combined))
+                return 0;
+            combined[pos] = base[pos];
+            ++pos;
+        }
+        if (pos + 1 >= sizeof(combined))
+            return 0;
+        combined[pos++] = '/';
+    }
+
+    while (*input != '\0') {
+        if (pos + 1 >= sizeof(combined))
+            return 0;
+        combined[pos++] = *input++;
+    }
+    combined[pos] = '\0';
+
+    return shell_normalize_absolute_path(combined, out, out_cap);
+}
+
+static int shell_resolve_path(const char* raw, char* out, vk_usize out_cap)
+{
+    return shell_resolve_path_from(s_cwd, raw, out, out_cap);
+}
+
+static void shell_query_default_path(char* out, vk_usize out_cap)
+{
+    char response[160];
+
+    if (out == VK_NULL || out_cap == 0)
+        return;
+
+    out[0] = '\0';
+    response[0] = '\0';
+
+    vk_kobj_rpc_path_json("get", "fs/root_path", response, sizeof(response));
+    if (vk_kobj_response_ok(response)
+            && vk_json_extract_string_field(response, "value", out, out_cap)
+            && out[0] != '\0') {
+        return;
+    }
+
+    shell_copy_line(out, out_cap, "/");
+}
+
+static void shell_init_paths(void)
+{
+    shell_query_default_path(s_root_path, sizeof(s_root_path));
+    shell_copy_line(s_cwd, sizeof(s_cwd), s_root_path);
+}
+
+static int shell_directory_exists(const char* path)
+{
+    char response[128];
+    response[0] = '\0';
+    vk_kobj_rpc_path_json("fs_list", path, response, sizeof(response));
+    return vk_kobj_response_ok(response);
+}
+
+static int shell_parse_fs_item(const char* record,
+                               int* is_directory,
+                               char* name,
+                               vk_usize name_cap,
+                               vk_u64* size)
+{
+    const char* cursor;
+    vk_u64 parsed_size = 0;
+    vk_usize name_len = 0;
+
+    if (record == VK_NULL || record[0] == '\0' || record[1] != '\t')
+        return 0;
+
+    if (is_directory != VK_NULL)
+        *is_directory = record[0] == 'D';
+
+    cursor = record + 2;
+    while (*cursor != '\0' && *cursor != '\t') {
+        if (name != VK_NULL && name_len + 1 < name_cap)
+            name[name_len] = *cursor;
+        ++name_len;
+        ++cursor;
+    }
+
+    if (*cursor != '\t')
+        return 0;
+
+    if (name != VK_NULL && name_cap > 0) {
+        vk_usize copy_len = name_len < name_cap - 1 ? name_len : name_cap - 1;
+        name[copy_len] = '\0';
+    }
+
+    ++cursor;
+    while (*cursor >= '0' && *cursor <= '9') {
+        parsed_size = parsed_size * 10ULL + (vk_u64)(*cursor - '0');
+        ++cursor;
+    }
+
+    if (size != VK_NULL)
+        *size = parsed_size;
+
+    return name_len > 0;
+}
+
+static void shell_print_ls_entry(const char* name, int is_directory, vk_u64 size)
+{
+    VK_CALL(puts, is_directory ? "d " : "f ");
+
+    if (is_directory) {
+        VK_CALL(puts, name);
+        VK_CALL(puts, "/\n");
+        return;
+    }
+
+    shell_put_padded(name, 28);
+    VK_CALL(puts, "  ");
+    shell_put_dec_width(size, 8);
+    VK_CALL(putc, '\n');
+}
+
+static int shell_list_directory(const char* path)
+{
+    char response[SHELL_FS_RESPONSE_MAX];
+    char raw_items[SHELL_FS_ITEMS_MAX][SHELL_FS_ITEM_MAX];
+    int count;
+    int printed = 0;
+
+    VK_CALL(memset, response, 0, sizeof(response));
+    VK_CALL(memset, raw_items, 0, sizeof(raw_items));
+    vk_kobj_rpc_path_json("fs_list", path, response, sizeof(response));
+    if (!vk_kobj_response_ok(response))
+        return 0;
+
+    count = vk_json_extract_string_array_field(response,
+                                               "items",
+                                               &raw_items[0][0],
+                                               SHELL_FS_ITEM_MAX,
+                                               SHELL_FS_ITEMS_MAX);
+
+    for (int i = 0; i < count; ++i) {
+        char name[SHELL_FS_ITEM_MAX];
+        int is_directory = 0;
+        vk_u64 size = 0;
+
+        if (!shell_parse_fs_item(raw_items[i], &is_directory, name, sizeof(name), &size))
+            continue;
+
+        shell_print_ls_entry(name, is_directory, size);
+        printed = 1;
+    }
+
+    if (!printed)
+        VK_CALL(puts, "(empty)\n");
+
+    return 1;
+}
 
 static void cmd_help(const char* arg)
 {
     (void)arg;
     VK_CALL(puts, "Available commands:\n");
     VK_CALL(puts, "  help         - Show this message\n");
-    VK_CALL(puts, "  version      - Show API version\n");
-    VK_CALL(puts, "  mem          - Show memory info\n");
-    VK_CALL(puts, "  tasks        - Show scheduler tasks\n");
-    VK_CALL(puts, "  top          - Show live CPU usage per task\n");
-    VK_CALL(puts, "  ls           - Show staged files\n");
-    VK_CALL(puts, "  get <p>      - Read kobj value by path\n");
-    VK_CALL(puts, "  set <p> <v>  - Write kobj value by path\n");
-    VK_CALL(puts, "  watch <p> [ms]- Poll kobj value until keypress\n");
-    VK_CALL(puts, "  describe <p> - Show kobj node schema\n");
-    VK_CALL(puts, "  cat <f>      - Print a ramfs file\n");
+    VK_CALL(puts, "  version      - Show shell version\n");
+    VK_CALL(puts, "  pwd          - Print current directory\n");
+    VK_CALL(puts, "  cd [dir]     - Change current directory\n");
+    VK_CALL(puts, "  ls [path]    - List files and directories\n");
+    VK_CALL(puts, "  cat <file>   - Print a file\n");
     VK_CALL(puts, "  clear        - Clear the screen\n");
-    VK_CALL(puts, "  uptime       - Show tick count\n");
     VK_CALL(puts, "  reboot       - Reboot the machine\n");
-    VK_CALL(puts, "  idt          - Dump interrupt descriptor table\n");
-    VK_CALL(puts, "  alloc        - Allocate and free a test block\n");
-    VK_CALL(puts, "  run <cmd>    - Launch a userspace program with args\n");
-    VK_CALL(puts, "  drvload <d>  - Load a driver (e.g. drvload sb16.vko)\n");
-    VK_CALL(puts, "  drvunload <d>- Unload a driver\n");
-    VK_CALL(puts, "  panic        - Trigger a userspace fault\n");
+    VK_CALL(puts, "  run <cmd>    - Launch a program with args\n");
+    VK_CALL(puts, "  drvload <d>  - Load a driver (boot scripts use this)\n");
     VK_CALL(puts, "  exit         - Exit the shell\n");
+    VK_CALL(puts, "Programs can also be launched directly: foo or foo.vbin\n");
 }
 
 static void cmd_version(const char* arg)
 {
     (void)arg;
-    VK_CALL(puts, "vkernel userspace shell\n");
-    VK_CALL(puts, "  Loader : vkernel userspace\n");
+    VK_CALL(puts, "vkernel shell\n");
+    VK_CALL(puts, "  API version: ");
+    VK_CALL(put_dec, VK_API_VERSION);
+    VK_CALL(puts, "\n");
 }
 
-static void cmd_mem(const char* arg)
+static void cmd_pwd(const char* arg)
 {
     (void)arg;
-    vk_kobj_cmd_json("mem");
+    VK_CALL(puts, s_cwd);
+    VK_CALL(putc, '\n');
 }
 
-#define TOP_MAX_TASKS 64
-#define TOP_MAX_ROWS  18
-
-static const char* task_state_name(vk_u32 state)
+static void cmd_cd(const char* arg)
 {
-    switch (state) {
-        case 0: return "ready";
-        case 1: return "run";
-        case 2: return "sleep";
-        case 3: return "done";
-        default: return "?";
-    }
-}
+    char path[SHELL_PATH_MAX];
+    const char* raw = vk_skip_spaces(arg);
 
-static void shell_put_task_cpu(vk_u32 cpu, vk_usize width)
-{
-    if (cpu == VK_TASK_CPU_NONE) {
-        shell_put_padded("-", width);
+    if (*raw == '\0')
+        raw = s_root_path;
+
+    if (!shell_resolve_path(raw, path, sizeof(path))) {
+        VK_CALL(puts, "cd: path too long\n");
         return;
     }
 
-    shell_put_dec_width((vk_u64)cpu, width);
-}
-
-static void tasks_print_row(const vk_task_info_t* task)
-{
-    shell_put_dec_width(task->id, 3);
-    VK_CALL(puts, "  ");
-    shell_put_task_cpu(task->cpu, 3);
-    VK_CALL(puts, "  ");
-    shell_put_padded(task_state_name(task->state), 7);
-    VK_CALL(puts, "  ");
-    shell_put_dec_width(task->cpu_ticks, 8);
-    VK_CALL(puts, "  ");
-    VK_CALL(puts, task->name);
-    VK_CALL(putc, '\n');
-}
-
-static void cmd_tasks(const char* arg)
-{
-    vk_task_info_t tasks[TOP_MAX_TASKS];
-    vk_usize total;
-    vk_usize count;
-
-    (void)arg;
-    total = VK_CALL(task_snapshot, tasks, TOP_MAX_TASKS);
-    count = total < TOP_MAX_TASKS ? total : TOP_MAX_TASKS;
-
-    VK_CALL(puts, "PID  CPU  STATE    CPU TICKS  NAME\n");
-    for (vk_usize i = 0; i < count; ++i)
-        tasks_print_row(&tasks[i]);
-
-    if (total > count) {
-        VK_CALL(puts, "... ");
-        VK_CALL(put_dec, (vk_u64)(total - count));
-        VK_CALL(puts, " more task(s) not shown.\n");
+    if (!shell_directory_exists(path)) {
+        VK_CALL(puts, "cd: directory not found: ");
+        VK_CALL(puts, raw);
+        VK_CALL(putc, '\n');
+        return;
     }
-}
-
-static vk_u64 top_find_previous_ticks(const vk_task_info_t* tasks,
-                                      vk_usize count,
-                                      vk_u64 id)
-{
-    for (vk_usize i = 0; i < count; ++i) {
-        if (tasks[i].id == id)
-            return tasks[i].cpu_ticks;
-    }
-    return 0;
-}
-
-static vk_u64 top_cpu_delta(const vk_task_info_t* task,
-                            const vk_task_info_t* prev,
-                            vk_usize prev_count)
-{
-    vk_u64 old_ticks = top_find_previous_ticks(prev, prev_count, task->id);
-    return task->cpu_ticks >= old_ticks ? task->cpu_ticks - old_ticks : 0;
-}
-
-static void top_print_percent(vk_u64 cpu_delta, vk_u64 elapsed_ticks)
-{
-    vk_u64 tenths;
-    if (elapsed_ticks == 0)
-        elapsed_ticks = 1;
-
-    tenths = (cpu_delta * 1000ULL + elapsed_ticks / 2ULL) / elapsed_ticks;
-    shell_put_dec_width(tenths / 10ULL, 3);
-    VK_CALL(putc, '.');
-    VK_CALL(putc, (char)('0' + (tenths % 10ULL)));
-}
-
-static void top_print_row(const vk_task_info_t* task,
-                          vk_u64 cpu_delta,
-                          vk_u64 elapsed_ticks)
-{
-    shell_put_dec_width(task->id, 3);
-    VK_CALL(puts, "  ");
-    shell_put_task_cpu(task->cpu, 3);
-    VK_CALL(puts, "  ");
-    top_print_percent(cpu_delta, elapsed_ticks);
-    VK_CALL(puts, "  ");
-    shell_put_dec_width(task->cpu_ticks, 8);
-    VK_CALL(puts, "  ");
-    shell_put_padded(task_state_name(task->state), 7);
-    VK_CALL(puts, "  ");
-    VK_CALL(puts, task->name);
-    VK_CALL(putc, '\n');
-}
-
-static void top_render(const vk_task_info_t* prev,
-                       vk_usize prev_count,
-                       const vk_task_info_t* now,
-                       vk_usize now_count,
-                       vk_usize total_tasks,
-                       vk_u64 elapsed_ticks)
-{
-    int printed[TOP_MAX_TASKS];
-    vk_usize rows = now_count < TOP_MAX_ROWS ? now_count : TOP_MAX_ROWS;
-
-    for (vk_usize i = 0; i < TOP_MAX_TASKS; ++i)
-        printed[i] = 0;
-
-    VK_CALL(clear);
-    VK_CALL(puts, "vkernel top - press q to quit\n");
-    VK_CALL(puts, "Tasks: ");
-    VK_CALL(put_dec, (vk_u64)total_tasks);
-    VK_CALL(puts, "   Sample: ");
-    VK_CALL(put_dec, elapsed_ticks);
-    VK_CALL(puts, " ticks\n\n");
-    VK_CALL(puts, "PID  CPU  CPU%   CPU TICKS  STATE    NAME\n");
-
-    for (vk_usize row = 0; row < rows; ++row) {
-        vk_usize best = TOP_MAX_TASKS;
-        vk_u64 best_delta = 0;
-
-        for (vk_usize i = 0; i < now_count; ++i) {
-            vk_u64 delta;
-            if (printed[i])
-                continue;
-
-            delta = top_cpu_delta(&now[i], prev, prev_count);
-            if (best == TOP_MAX_TASKS || delta > best_delta ||
-                (delta == best_delta && now[i].id < now[best].id)) {
-                best = i;
-                best_delta = delta;
-            }
-        }
-
-        if (best == TOP_MAX_TASKS)
-            break;
-
-        printed[best] = 1;
-        top_print_row(&now[best], best_delta, elapsed_ticks);
-    }
-
-    if (total_tasks > now_count) {
-        VK_CALL(puts, "\n");
-        VK_CALL(put_dec, (vk_u64)(total_tasks - now_count));
-        VK_CALL(puts, " more task(s) not shown.\n");
-    }
-}
-
-static void cmd_top(const char* arg)
-{
-    vk_task_info_t prev[TOP_MAX_TASKS];
-    vk_task_info_t now[TOP_MAX_TASKS];
-    vk_usize prev_total;
-    vk_usize prev_count;
-    int once = 0;
-
-    arg = vk_skip_spaces(arg);
-    if (vk_strcmp(arg, "once") == 0)
-        once = 1;
-
-    prev_total = VK_CALL(task_snapshot, prev, TOP_MAX_TASKS);
-    prev_count = prev_total < TOP_MAX_TASKS ? prev_total : TOP_MAX_TASKS;
-
-    for (;;) {
-        vk_u64 start = VK_CALL(tick_count);
-        vk_u64 end;
-        vk_u64 elapsed;
-        vk_usize total;
-        vk_usize count;
-
-        VK_CALL(sleep, VK_CALL(ticks_per_sec));
-        end = VK_CALL(tick_count);
-        elapsed = end >= start ? end - start : 1;
-
-        total = VK_CALL(task_snapshot, now, TOP_MAX_TASKS);
-        count = total < TOP_MAX_TASKS ? total : TOP_MAX_TASKS;
-        top_render(prev, prev_count, now, count, total, elapsed);
-
-        for (vk_usize i = 0; i < count; ++i)
-            prev[i] = now[i];
-        prev_count = count;
-
-        if (once)
-            break;
-
-        char c = VK_CALL(try_getc);
-        if (c == 'q' || c == 'Q' || c == 27 || c == '\r' || c == '\n') {
-            VK_CALL(puts, "\n");
-            break;
-        }
-    }
+    shell_copy_line(s_cwd, sizeof(s_cwd), path);
 }
 
 static void cmd_ls(const char* arg)
 {
-    const char* path = vk_skip_spaces(arg);
-    if (*path == '\0')
-        path = "";
-    vk_kobj_ls_text(path);
-}
+    char path[SHELL_PATH_MAX];
+    const char* raw = vk_skip_spaces(arg);
 
-static void cmd_kget(const char* arg)
-{
-    const char* path = vk_skip_spaces(arg);
-    if (*path == '\0') {
-        VK_CALL(puts, "Usage: get <path>\n");
-        return;
-    }
-    vk_kobj_get_json(path);
-}
-
-static void cmd_kset(const char* arg)
-{
-    const char* path = vk_skip_spaces(arg);
-    if (*path == '\0') {
-        VK_CALL(puts, "Usage: set <path> <value>\n");
+    if (!shell_resolve_path(raw, path, sizeof(path))) {
+        VK_CALL(puts, "ls: path too long\n");
         return;
     }
 
-    const char* val = path;
-    while (*val && *val != ' ' && *val != '\t') ++val;
-    if (*val == '\0') {
-        VK_CALL(puts, "Usage: set <path> <value>\n");
+    if (shell_list_directory(path))
+        return;
+
+    if (VK_CALL(file_exists, path)) {
+        shell_print_ls_entry(shell_basename(path), 0, VK_CALL(file_size, path));
         return;
     }
 
-    char path_buf[128];
-    vk_usize path_len = (vk_usize)(val - path);
-    vk_usize i;
-    for (i = 0; i < path_len && i < sizeof(path_buf) - 1; ++i)
-        path_buf[i] = path[i];
-    path_buf[i] = '\0';
-
-    val = vk_skip_spaces(val);
-    vk_kobj_set_json(path_buf, val);
-}
-
-static void cmd_kwatch(const char* arg)
-{
-    const char* path = vk_skip_spaces(arg);
-    if (*path == '\0') {
-        VK_CALL(puts, "Usage: watch <path> [interval_ms]\n");
-        return;
-    }
-
-    vk_u32 interval_ms = 1000;
-    const char* space = path;
-    while (*space && *space != ' ' && *space != '\t') ++space;
-    if (*space != '\0') {
-        const char* ms_str = vk_skip_spaces(space);
-        vk_u64 parsed = 0;
-        while (*ms_str >= '0' && *ms_str <= '9') {
-            parsed = parsed * 10ULL + (vk_u64)(*ms_str - '0');
-            ++ms_str;
-        }
-        if (parsed > 0 && parsed < 60000)
-            interval_ms = (vk_u32)parsed;
-    }
-
-    char path_buf[128];
-    vk_usize i;
-    vk_usize path_len = (vk_usize)(space - path);
-    for (i = 0; i < path_len && i < sizeof(path_buf) - 1; ++i)
-        path_buf[i] = path[i];
-    path_buf[i] = '\0';
-
-    VK_CALL(puts, "Watching ");
-    VK_CALL(puts, path_buf);
-    VK_CALL(puts, " (press any key to stop)\n");
-
-    for (;;) {
-        vk_u64 tps = VK_CALL(ticks_per_sec);
-        vk_u64 ticks = ((vk_u64)interval_ms * tps + 999ULL) / 1000ULL;
-        if (ticks == 0) ticks = 1;
-        vk_kobj_get_json(path_buf);
-        VK_CALL(sleep, ticks);
-        {
-            char c = VK_CALL(try_getc);
-            if (c != '\0') break;
-        }
-    }
-}
-
-static void cmd_kdescribe(const char* arg)
-{
-    const char* path = vk_skip_spaces(arg);
-    if (*path == '\0') {
-        VK_CALL(puts, "Usage: describe <path>\n");
-        return;
-    }
-    vk_kobj_describe_json(path);
+    VK_CALL(puts, "ls: not found: ");
+    VK_CALL(puts, raw[0] != '\0' ? raw : path);
+    VK_CALL(putc, '\n');
 }
 
 static void cmd_cat(const char* arg)
 {
-    const char* path = vk_skip_spaces(arg);
-    if (*path == '\0') {
+    char path[SHELL_PATH_MAX];
+    const char* raw = vk_skip_spaces(arg);
+
+    if (*raw == '\0') {
         VK_CALL(puts, "Usage: cat <filename>\n");
+        return;
+    }
+
+    if (!shell_resolve_path(raw, path, sizeof(path))) {
+        VK_CALL(puts, "cat: path too long\n");
         return;
     }
 
     vk_file_handle_t fh = VK_CALL(file_open, path, "r");
     if (fh == (vk_file_handle_t)0) {
         VK_CALL(puts, "cat: file not found: ");
-        VK_CALL(puts, path);
+        VK_CALL(puts, raw);
         VK_CALL(puts, "\n");
         return;
     }
@@ -738,51 +745,23 @@ static void cmd_clear(const char* arg)
     VK_CALL(clear);
 }
 
-static void cmd_uptime(const char* arg)
-{
-    (void)arg;
-    vk_kobj_cmd_json("uptime");
-}
-
 static void cmd_reboot(const char* arg)
 {
     (void)arg;
     vk_kobj_cmd_json("reboot");
 }
 
-static void cmd_idt(const char* arg)
-{
-    (void)arg;
-    vk_kobj_cmd_json("idt");
-}
-
-static void cmd_alloc(const char* arg)
-{
-    (void)arg;
-    VK_CALL(puts, "Allocating 4096 bytes... ");
-    void* ptr = VK_CALL(malloc, 4096);
-    if (!ptr) {
-        VK_CALL(puts, "FAILED\n");
-        return;
-    }
-    VK_CALL(puts, "OK at ");
-    VK_CALL(put_hex, (vk_u64)(unsigned long)ptr);
-    VK_CALL(puts, "\n");
-    VK_CALL(free, ptr);
-    VK_CALL(puts, "Freed.\n");
-}
-
 static int shell_extract_program_path(const char* command_line,
                                       char* out,
                                       vk_usize out_cap,
-                                      int* has_extra_args)
+                                      const char** out_rest)
 {
     const char* p = vk_skip_spaces(command_line);
     vk_usize pos = 0;
     char quote = 0;
 
-    if (has_extra_args)
-        *has_extra_args = 0;
+    if (out_rest)
+        *out_rest = p;
 
     if (*p == '\0' || out_cap < 2)
         return 0;
@@ -812,15 +791,110 @@ static int shell_extract_program_path(const char* command_line,
         return 0;
 
     p = vk_skip_spaces(p);
-    if (has_extra_args && *p != '\0')
-        *has_extra_args = 1;
+    if (out_rest)
+        *out_rest = p;
+
+    return 1;
+}
+
+static int shell_append_string(char* out,
+                               vk_usize out_cap,
+                               vk_usize* pos,
+                               const char* text)
+{
+    while (*text != '\0') {
+        if (*pos + 1 >= out_cap)
+            return 0;
+        out[(*pos)++] = *text++;
+    }
+
+    out[*pos] = '\0';
+    return 1;
+}
+
+static int shell_try_resolve_program_path(const char* raw_path,
+                                          char* out,
+                                          vk_usize out_cap)
+{
+    char path[SHELL_PATH_MAX];
+    vk_usize len;
+
+    if (!shell_resolve_path(raw_path, path, sizeof(path)))
+        return 0;
+
+    if (VK_CALL(file_exists, path)) {
+        shell_copy_line(out, out_cap, path);
+        return 1;
+    }
+
+    if (vk_has_suffix(path, ".vbin"))
+        return 0;
+
+    len = vk_strlen(path);
+    if (len + 5 >= sizeof(path))
+        return 0;
+
+    path[len + 0] = '.';
+    path[len + 1] = 'v';
+    path[len + 2] = 'b';
+    path[len + 3] = 'i';
+    path[len + 4] = 'n';
+    path[len + 5] = '\0';
+
+    if (!VK_CALL(file_exists, path))
+        return 0;
+
+    shell_copy_line(out, out_cap, path);
+    return 1;
+}
+
+static int shell_build_resolved_command_line(const char* path,
+                                             const char* rest,
+                                             char* out,
+                                             vk_usize out_cap)
+{
+    vk_usize pos = 0;
+
+    if (out_cap == 0)
+        return 0;
+
+    out[0] = '\0';
+    if (shell_path_has_spaces(path)) {
+        if (pos + 1 >= out_cap)
+            return 0;
+        out[pos++] = '"';
+        out[pos] = '\0';
+        if (!shell_append_string(out, out_cap, &pos, path))
+            return 0;
+        if (pos + 1 >= out_cap)
+            return 0;
+        out[pos++] = '"';
+        out[pos] = '\0';
+    } else if (!shell_append_string(out, out_cap, &pos, path)) {
+        return 0;
+    }
+
+    if (rest != VK_NULL && *rest != '\0') {
+        if (pos + 1 >= out_cap)
+            return 0;
+        out[pos++] = ' ';
+        out[pos] = '\0';
+        if (!shell_append_string(out, out_cap, &pos, rest))
+            return 0;
+    }
 
     return 1;
 }
 
 static int shell_launch_program(const char* command_line, int verbose)
 {
+    const char* rest = VK_NULL;
+    char program_path[SHELL_PATH_MAX];
+    char resolved_path[SHELL_PATH_MAX];
+    char resolved_cmdline[SHELL_LINE_MAX];
     const char* cmd = vk_skip_spaces(command_line);
+    int has_extra_args = 0;
+    vk_i64 task_id;
 
     if (*cmd == '\0') {
         if (verbose)
@@ -828,33 +902,47 @@ static int shell_launch_program(const char* command_line, int verbose)
         return -1;
     }
 
-    vk_i64 task_id;
-    if (vk_get_api()->vk_run_cmdline) {
-        task_id = vk_get_api()->vk_run_cmdline(cmd);
-    } else {
-        char path[256];
-        int has_args = 0;
+    if (!shell_extract_program_path(cmd, program_path, sizeof(program_path), &rest)) {
+        if (verbose)
+            VK_CALL(puts, "Usage: run <program> [args...]\n");
+        return -1;
+    }
 
-        if (!shell_extract_program_path(cmd, path, sizeof(path), &has_args)) {
+    has_extra_args = rest != VK_NULL && *rest != '\0';
+    if (!shell_try_resolve_program_path(program_path, resolved_path, sizeof(resolved_path))) {
+        if (verbose) {
+            VK_CALL(puts, "run: program not found: ");
+            VK_CALL(puts, program_path);
+            VK_CALL(putc, '\n');
+        }
+        return -1;
+    }
+
+    if (vk_get_api()->vk_run_cmdline) {
+        if (!shell_build_resolved_command_line(resolved_path,
+                                               rest,
+                                               resolved_cmdline,
+                                               sizeof(resolved_cmdline))) {
             if (verbose)
-                VK_CALL(puts, "Usage: run <program> [args...]\n");
+                VK_CALL(puts, "run: command line too long\n");
             return -1;
         }
-
-        if (has_args && verbose)
+        task_id = vk_get_api()->vk_run_cmdline(resolved_cmdline);
+    } else {
+        if (has_extra_args && verbose)
             VK_CALL(puts, "run: kernel API too old, ignoring arguments.\n");
 
         if (vk_get_api()->vk_run_auto)
-            task_id = vk_get_api()->vk_run_auto(path);
+            task_id = vk_get_api()->vk_run_auto(resolved_path);
         else
-            task_id = VK_CALL(run, path);
+            task_id = VK_CALL(run, resolved_path);
     }
 
     if (task_id < 0) {
         if (verbose) {
             VK_CALL(puts, "run: failed to launch ");
-            VK_CALL(puts, cmd);
-            VK_CALL(puts, "\n");
+            VK_CALL(puts, resolved_path);
+            VK_CALL(putc, '\n');
         }
         return -1;
     }
@@ -874,49 +962,6 @@ static void cmd_run(const char* arg)
     (void)shell_launch_program(arg, 1);
 }
 
-static int try_run_vbin_command(const char* cmdline)
-{
-    char path[256];
-    vk_usize name_len = 0;
-
-    while (cmdline[name_len] != '\0' &&
-           cmdline[name_len] != ' ' &&
-           cmdline[name_len] != '\t') {
-        if (name_len + 1 >= sizeof(path))
-            return 0;
-        path[name_len] = cmdline[name_len];
-        ++name_len;
-    }
-
-    if (cmdline[name_len] != '\0')
-        return 0;
-
-    path[name_len] = '\0';
-    if (name_len == 0)
-        return 0;
-
-    if (vk_has_suffix(path, ".vbin")) {
-        if (!VK_CALL(file_exists, path))
-            return 0;
-        return shell_launch_program(path, 0) == 0;
-    }
-
-    if (name_len + 5 >= sizeof(path))
-        return 0;
-
-    path[name_len + 0] = '.';
-    path[name_len + 1] = 'v';
-    path[name_len + 2] = 'b';
-    path[name_len + 3] = 'i';
-    path[name_len + 4] = 'n';
-    path[name_len + 5] = '\0';
-
-    if (!VK_CALL(file_exists, path))
-        return 0;
-
-    return shell_launch_program(path, 0) == 0;
-}
-
 static void cmd_drvload(const char* arg)
 {
     const char* name = vk_skip_spaces(arg);
@@ -926,23 +971,6 @@ static void cmd_drvload(const char* arg)
         return;
     }
     vk_kobj_named_cmd_json("drvload", name);
-}
-
-static void cmd_drvunload(const char* arg)
-{
-    const char* name = vk_skip_spaces(arg);
-    if (*name == '\0') {
-        VK_CALL(puts, "Usage: drvunload <driver_name>\n");
-        return;
-    }
-    vk_kobj_named_cmd_json("drvunload", name);
-}
-
-static void cmd_panic(const char* arg)
-{
-    (void)arg;
-    VK_CALL(puts, "Triggering userspace fault...\n");
-    ((void(*)())0)();
 }
 
 static void cmd_exit(const char* arg)
@@ -977,33 +1005,24 @@ static const exact_cmd_t EXACT_CMDS[] = {
     { "help",    cmd_help     },
     { "?",       cmd_help     },
     { "version", cmd_version  },
-    { "mem",     cmd_mem      },
-    { "tasks",   cmd_tasks    },
-    { "top",     cmd_top      },
+    { "pwd",     cmd_pwd      },
+    { "cd",      cmd_cd       },
     { "ls",      cmd_ls       },
+    { "cat",     cmd_cat      },
+    { "run",     cmd_run      },
+    { "drvload", cmd_drvload  },
     { "clear",   cmd_clear    },
-    { "uptime",  cmd_uptime   },
     { "reboot",  cmd_reboot   },
-    { "idt",     cmd_idt      },
-    { "alloc",   cmd_alloc    },
-    { "panic",   cmd_panic    },
     { "exit",    cmd_exit     },
 };
 
 static const prefix_cmd_t PREFIX_CMDS[] = {
     { "cat ",       4,  cmd_cat       },
-    { "top ",       4,  cmd_top       },
+    { "cd ",        3,  cmd_cd        },
     { "ls ",        3,  cmd_ls        },
-    { "get ",       4,  cmd_kget      },
-    { "set ",       4,  cmd_kset      },
-    { "watch ",     6,  cmd_kwatch    },
-    { "describe ",  9,  cmd_kdescribe },
     { "run ",       4,  cmd_run       },
     { "drvload ",   8,  cmd_drvload   },
-    { "drvunload ", 10, cmd_drvunload },
 };
-
-#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
 
 static int parse_cmdline(const char* cmdline)
 {
@@ -1023,10 +1042,10 @@ static int parse_cmdline(const char* cmdline)
         }
     }
 
-    if (try_run_vbin_command(cmdline))
+    if (shell_launch_program(cmdline, 0) == 0)
         return 0;
 
-    VK_CALL(puts, "Unknown command: ");
+    VK_CALL(puts, "Command not found: ");
     VK_CALL(puts, cmdline);
     VK_CALL(puts, "\n");
     VK_CALL(puts, "Type 'help' for available commands.\n");
@@ -1102,6 +1121,7 @@ static void read_startup_script(void)
 int _start(const vk_api_t* api)
 {
     vk_init(api);
+    shell_init_paths();
 
     int run_startup_script = 0;
 
