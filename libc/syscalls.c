@@ -260,8 +260,13 @@ int _write(int fd, const char* buf, int len)
 
     /* stdout / stderr → console */
     if (fd == VK_FD_STDOUT || fd == VK_FD_STDERR) {
-        for (int i = 0; i < len; ++i)
+        if (vk_get_api()->vk_stdio_write) {
+            return (int)vk_get_api()->vk_stdio_write(buf, (vk_usize)len);
+        }
+
+        for (int i = 0; i < len; ++i) {
             VK_CALL(putc, buf[i]);
+        }
         return len;
     }
 

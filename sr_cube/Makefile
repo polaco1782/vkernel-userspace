@@ -33,6 +33,7 @@ LDFLAGS += -L$(SYSROOT)/lib
 LDFLAGS += -L$(LIBC_DIR)
 
 CRT0   := $(LIBC_DIR)/crt0.o
+LIBVKSYS := $(LIBC_DIR)/libvksys.a
 LIBS   := -Wl,--start-group -lvksys -lc -lm -lgcc -Wl,--end-group
 
 TARGET := sr_cube.vbin
@@ -41,7 +42,7 @@ TARGET := sr_cube.vbin
 
 all: $(TARGET)
 
-$(TARGET): sr_cube.c $(CRT0)
+$(TARGET): sr_cube.c $(CRT0) $(LIBVKSYS)
 	@echo "  CC      $<  →  $@"
 	@$(CC) $(CFLAGS) -c sr_cube.c -o sr_cube.o
 	@echo "  LD      $@"

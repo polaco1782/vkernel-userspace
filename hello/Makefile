@@ -40,6 +40,7 @@ LDFLAGS += -L$(LIBC_DIR)
 
 # Link order: crt0 → program objects → --start-group (libc, glue, libgcc) --end-group
 CRT0   := $(LIBC_DIR)/crt0.o
+LIBVKSYS := $(LIBC_DIR)/libvksys.a
 LIBS   := -Wl,--start-group -lvksys -lc -lm -lgcc -Wl,--end-group
 
 TARGET := hello.vbin
@@ -48,7 +49,7 @@ TARGET := hello.vbin
 
 all: $(TARGET)
 
-$(TARGET): hello.c $(CRT0)
+$(TARGET): hello.c $(CRT0) $(LIBVKSYS)
 	@echo "  CC      $<  →  $@"
 	@$(CC) $(CFLAGS) -c hello.c -o hello.o
 	@echo "  LD      $@"

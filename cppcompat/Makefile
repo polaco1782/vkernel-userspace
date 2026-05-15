@@ -41,6 +41,7 @@ LDFLAGS  += -L$(LIBC_DIR)
 LDFLAGS  += -L$(CPP_DIR)
 
 CRT0            := $(LIBC_DIR)/crt0.o
+LIBVKSYS        := $(LIBC_DIR)/libvksys.a
 CPP_RUNTIME_LIB := $(CPP_DIR)/libvkcpp.a
 LIBS            := -Wl,--start-group -lvkcpp -lvksys -lc -lm -lgcc -Wl,--end-group
 DEBUG_ARG       := $(if $(DEBUG),DEBUG=$(DEBUG),)
@@ -66,7 +67,7 @@ $(CPP_RUNTIME_LIB):
 	@echo "  CXX     $<"
 	@$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(TARGET): $(OBJS) $(CRT0) $(CPP_RUNTIME_LIB)
+$(TARGET): $(OBJS) $(CRT0) $(LIBVKSYS) $(CPP_RUNTIME_LIB)
 	@echo "  LD      $@"
 	@$(CXX) $(LDFLAGS) -o $@ $(CRT0) $(OBJS) $(LIBS)
 ifndef DEBUG

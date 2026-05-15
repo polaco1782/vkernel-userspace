@@ -58,6 +58,7 @@ LDFLAGS += -L$(LIBC_DIR)
 LDFLAGS += -L$(CPP_DIR)
 
 CRT0            := $(LIBC_DIR)/crt0.o
+LIBVKSYS        := $(LIBC_DIR)/libvksys.a
 CPP_RUNTIME_LIB := $(CPP_DIR)/libvkcpp.a
 DEBUG_ARG       := $(if $(DEBUG),DEBUG=$(DEBUG),)
 LIBS            := -Wl,--start-group -lvkcpp -lvksys -lc -lm -lgcc -Wl,--end-group
@@ -83,7 +84,7 @@ main.o: main.cpp
 	@echo "  CC      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET): $(OBJS) $(CRT0) $(CPP_RUNTIME_LIB)
+$(TARGET): $(OBJS) $(CRT0) $(LIBVKSYS) $(CPP_RUNTIME_LIB)
 	@echo "  LD      $@"
 	@$(CC) $(LDFLAGS) -o $@ $(CRT0) $(OBJS) $(LIBS)
 ifndef DEBUG

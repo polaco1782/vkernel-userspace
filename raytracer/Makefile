@@ -43,6 +43,7 @@ LDFLAGS += -L$(LIBC_DIR)
 
 # Link order: crt0 → program objects → --start-group (libc, glue, libgcc) --end-group
 CRT0   := $(LIBC_DIR)/crt0.o
+LIBVKSYS := $(LIBC_DIR)/libvksys.a
 LIBS   := -Wl,--start-group -lvksys -lc -lm -lgcc -Wl,--end-group
 
 TARGET := raytracer.vbin
@@ -51,7 +52,7 @@ TARGET := raytracer.vbin
 
 all: $(TARGET)
 
-$(TARGET): raytracer.c $(CRT0)
+$(TARGET): raytracer.c $(CRT0) $(LIBVKSYS)
 	@echo "  CC      $<  →  $@"
 	@$(CC) $(CFLAGS) -c raytracer.c -o raytracer.o
 	@echo "  LD      $@"

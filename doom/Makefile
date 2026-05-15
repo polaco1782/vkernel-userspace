@@ -59,6 +59,7 @@ LDFLAGS += -L$(SYSROOT)/lib
 LDFLAGS += -L$(LIBC_DIR)
 
 CRT0   := $(LIBC_DIR)/crt0.o
+LIBVKSYS := $(LIBC_DIR)/libvksys.a
 LIBS   := -Wl,--start-group -lvksys -lc -lm -lgcc -Wl,--end-group
 
 # ---------- Source file lists ----------
@@ -224,7 +225,7 @@ $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 # Link
-$(TARGET): $(ALL_OBJS) $(CRT0)
+$(TARGET): $(ALL_OBJS) $(CRT0) $(LIBVKSYS)
 	@echo "  LD      $@"
 	@$(CC) $(LDFLAGS) -o $@ $(CRT0) $(ALL_OBJS) $(LIBS)
 ifndef DEBUG
