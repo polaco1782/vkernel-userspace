@@ -89,11 +89,12 @@ static int parse_argv(char* cmdline, char** argv, int max_args)
             *write++ = *read++;
         }
 
-        *write = '\0';
-        argv[argc++] = token;
-
+        /* Preserve the next token start before we overwrite the delimiter. */
         while (is_ascii_space(*read))
             ++read;
+
+        *write = '\0';
+        argv[argc++] = token;
     }
 
     argv[argc] = (char*)0;
