@@ -44,6 +44,7 @@ typedef struct {
 extern quakeparms_t host_parms;
 
 extern cvar_t sys_ticrate;
+extern cvar_t host_framerate;
 
 extern cvar_t developer;
 

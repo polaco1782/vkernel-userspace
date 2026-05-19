@@ -6,6 +6,7 @@
 /* Must be defined before any header that pulls in SDL.h */
 #define SDL_GETTICKS_PROVIDED
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,11 @@
 
 int main(int argc, char *argv[])
 {
+    const uint64_t ticks_per_second = VK_CALL(ticks_per_sec);
+    const uint64_t min_frame_ticks =
+        ticks_per_second > 72 ? (ticks_per_second / 72) : 1;
+    uint64_t last_frame_tick = VK_CALL(tick_count);
+
     printf("Chocolate Quake " PACKAGE_VERSION " - vkernel build\n");
 
     quakeparms_t *parms = Sys_Init(argc, argv);
@@ -26,14 +32,27 @@ int main(int argc, char *argv[])
     while (1) {
         double new_time = Sys_FloatTime();
         double dt = new_time - old_time;
+        int previous_framecount = host_framecount;
         Host_Frame((float)dt);
         old_time = new_time;
+
+        if (host_framecount != previous_framecount) {
+            last_frame_tick = VK_CALL(tick_count);
+        } else {
+            uint64_t now_tick = VK_CALL(tick_count);
+            uint64_t next_frame_tick = last_frame_tick + min_frame_ticks;
+
+            if (now_tick + 1 < next_frame_tick) {
+                VK_CALL(sleep, next_frame_tick - now_tick - 1);
+            } else {
+                VK_CALL(yield);
+            }
+        }
     }
     return 0;
 }
 
 /* SDL_GetTicks - real implementation (replaces inline stub in SDL.h) */
-#include <stdint.h>
 uint32_t SDL_GetTicks(void)
 {
     uint64_t ticks = VK_CALL(tick_count);
