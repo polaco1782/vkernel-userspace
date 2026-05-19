@@ -256,6 +256,20 @@ static vk_u64 frame_ticks_for_fps(vk_u32 ticks_per_sec, vk_u32 fps)
     return ticks ? ticks : 1;
 }
 
+static int resize_backbuffer(uint32_t **backbuf, vk_u32 rw, vk_u32 rh)
+{
+    size_t small_bytes = (size_t)rw * rh * sizeof(uint32_t);
+    uint32_t *new_backbuf = (uint32_t *)malloc(small_bytes);
+    if (!new_backbuf) {
+        fprintf(stderr, "rotozoomer: out of memory for back buffer\n");
+        return 0;
+    }
+
+    free(*backbuf);
+    *backbuf = new_backbuf;
+    return 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* Entry point                                                         */
 /* ------------------------------------------------------------------ */
@@ -271,10 +285,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "rotozoomer: no framebuffer available\n");
         return 1;
     }
+    vk_set_framebuffer_resize_events(1);
 
-    const vk_u32 FB_W   = fb.width;
-    const vk_u32 FB_H   = fb.height;
-    const vk_u32 stride = fb.stride;          /* FB row pitch in pixels */
+    vk_u32 FB_W   = fb.width;
+    vk_u32 FB_H   = fb.height;
+    vk_u32 stride = fb.stride;          /* FB row pitch in pixels */
     const vk_u32 tps    = VK_CALL(ticks_per_sec);
     uint32_t    *fb_ptr = (uint32_t *)(uintptr_t)fb.base;
 
@@ -284,8 +299,8 @@ int main(int argc, char **argv)
     const vk_u64 frame_ticks = frame_ticks_for_fps(tps, target_fps);
 
     /* Render at half resolution — 4x fewer pixels to compute */
-    const vk_u32 RW = FB_W / 2;
-    const vk_u32 RH = FB_H / 2;
+    vk_u32 RW = FB_W / 2;
+    vk_u32 RH = FB_H / 2;
 
     /* Load BMP converted straight to FB-native pixel format */
     texture_t tex;
@@ -304,8 +319,8 @@ int main(int argc, char **argv)
     }
 
     /* Centre of the render resolution */
-    const float cx = (float)(RW / 2);
-    const float cy = (float)(RH / 2);
+    float cx = (float)(RW / 2);
+    float cy = (float)(RH / 2);
 
     int angle  = 0;
     float zoom_d = 0.0f; /* fractional degrees so step can vary smoothly */
@@ -321,6 +336,33 @@ int main(int argc, char **argv)
         } else if (now > next_frame_tick + frame_ticks) {
             /* If rendering falls behind, resync instead of accumulating lag. */
             next_frame_tick = now;
+        }
+
+        vk_framebuffer_event_t fb_event;
+        while (VK_CALL(poll_framebuffer_event, &fb_event)) {
+            if (fb_event.type != VK_FRAMEBUFFER_EVENT_RESIZED) {
+                continue;
+            }
+
+            VK_CALL(framebuffer_info, &fb);
+            if (!fb.valid || !fb.base || fb.width < 2 || fb.height < 2) {
+                continue;
+            }
+
+            FB_W = fb.width;
+            FB_H = fb.height;
+            stride = fb.stride;
+            fb_ptr = (uint32_t *)(uintptr_t)fb.base;
+            RW = FB_W / 2;
+            RH = FB_H / 2;
+            cx = (float)(RW / 2);
+            cy = (float)(RH / 2);
+            orbit_radius = (RW < RH ? (float)RW : (float)RH) * 0.55f;
+
+            if (!resize_backbuffer(&backbuf, RW, RH)) {
+                free(tex.pixels);
+                return 1;
+            }
         }
 
         /* ESC or Q to quit */

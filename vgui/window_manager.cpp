@@ -4,13 +4,25 @@
 
 #include <new>
 #include <stdio.h>
+#include <stdlib.h>
+#include <utility>
 
 namespace vgui {
+
+namespace {
+
+constexpr vk_usize k_framebuffer_alignment = 4096;
+constexpr vk_u32 k_min_app_width = 320;
+constexpr vk_u32 k_min_app_height = 240;
+constexpr float k_window_chrome_width = 40.0f;
+constexpr float k_window_chrome_height = 80.0f;
+
+} // namespace
 
 void FramebufferDeleter::operator()(vk_u32* ptr) const noexcept
 {
     if (ptr != nullptr) {
-        delete[] ptr;
+        free(ptr);
     }
 }
 
@@ -21,7 +33,10 @@ auto FramebufferSurface::allocate(vk_u32 width, vk_u32 height) -> bool
         return false;
     }
 
-    auto* pixels = new (std::nothrow) vk_u32[pixel_count];
+    const vk_usize bytes = pixel_count * sizeof(vk_u32);
+    const vk_usize aligned_bytes =
+        (bytes + k_framebuffer_alignment - 1) & ~(k_framebuffer_alignment - 1);
+    auto* pixels = static_cast<vk_u32*>(aligned_alloc(k_framebuffer_alignment, aligned_bytes));
     if (pixels == nullptr) {
         return false;
     }
@@ -62,6 +77,15 @@ auto WindowManager::app_task_running(vk_i64 task_id) -> bool
     }
 
     return false;
+}
+
+auto WindowManager::app_accepts_framebuffer_resize(vk_i64 task_id) -> bool
+{
+    if (task_id < 0 || !vk_get_api()->vk_task_accepts_framebuffer_resize) {
+        return false;
+    }
+
+    return vk_get_api()->vk_task_accepts_framebuffer_resize(static_cast<vk_u64>(task_id)) != 0;
 }
 
 auto WindowManager::focused_app_index() -> int
@@ -163,16 +187,60 @@ void WindowManager::capture_app_snapshot(AppWindow& app)
     }
 }
 
+auto WindowManager::resize_app_framebuffer(AppWindow& app, vk_u32 width, vk_u32 height) -> bool
+{
+    if (width == 0 || height == 0) {
+        return false;
+    }
+
+    if (app.width == width && app.height == height) {
+        return true;
+    }
+
+    FramebufferSurface pixels;
+    FramebufferSurface snapshot;
+    FramebufferSurface verify;
+    if (!pixels.allocate(width, height)
+        || !snapshot.allocate(width, height)
+        || !verify.allocate(width, height)) {
+        log_.addf("Failed to resize app task %lld surface to %ux%u.",
+                  static_cast<long long>(app.task_id),
+                  width,
+                  height);
+        return false;
+    }
+
+    vk_framebuffer_info_t framebuffer = {};
+    framebuffer.base = static_cast<vk_u64>(reinterpret_cast<vk_usize>(pixels.data()));
+    framebuffer.width = width;
+    framebuffer.height = height;
+    framebuffer.stride = width;
+    framebuffer.format = VK_PIXEL_FORMAT_BGRX_8BPP;
+    framebuffer.valid = 1u;
+
+    if(!vk_get_api()->vk_set_task_framebuffer(static_cast<vk_u64>(app.task_id), &framebuffer)) {
+        log_.addf("Failed to remap framebuffer for app task %lld.",
+                  static_cast<long long>(app.task_id));
+        return false;
+    }
+
+    if (vk_get_api()->vk_set_compositor_default_fb) {
+        (void)vk_get_api()->vk_set_compositor_default_fb(&framebuffer);
+    }
+
+    app.pixels = std::move(pixels);
+    app.snapshot = std::move(snapshot);
+    app.verify = std::move(verify);
+    app.width = width;
+    app.height = height;
+    return true;
+}
+
 auto WindowManager::launch_windowed_app(vk::string_view path, vk_u32 width, vk_u32 height) -> vk_i64
 {
     const int slot = find_free_app_slot();
     if (slot < 0) {
         log_.add("No free app window slots.");
-        return -1;
-    }
-
-    if (!vk_get_api()->vk_run_with_fb) {
-        log_.add("Kernel API too old: missing run_with_fb.");
         return -1;
     }
 
@@ -299,9 +367,14 @@ void WindowManager::draw_windows()
             continue;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(app.width) + 40.0f,
-                                        static_cast<float>(app.height) + 80.0f),
+        const bool app_accepts_resize = app_accepts_framebuffer_resize(app.task_id);
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(app.width) + k_window_chrome_width,
+                                        static_cast<float>(app.height) + k_window_chrome_height),
                                  ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSizeConstraints(
+            ImVec2((app_accepts_resize ? static_cast<float>(k_min_app_width) : 1.0f) + k_window_chrome_width,
+                   (app_accepts_resize ? static_cast<float>(k_min_app_height) : 1.0f) + k_window_chrome_height),
+            ImVec2(FLT_MAX, FLT_MAX));
         if (app.focus_next) {
             ImGui::SetNextWindowFocus();
             app.focus_next = false;
@@ -314,30 +387,31 @@ void WindowManager::draw_windows()
             }
 
             const ImVec2 available = ImGui::GetContentRegionAvail();
-            float scale_x = available.x / static_cast<float>(app.width);
-            float scale_y = available.y / static_cast<float>(app.height);
-            float scale = scale_x < scale_y ? scale_x : scale_y;
-            if (scale <= 0.0f) {
-                scale = 1.0f;
+            float draw_width = available.x > 1.0f ? available.x : 1.0f;
+            float draw_height = available.y > 1.0f ? available.y : 1.0f;
+
+            if (app_accepts_resize) {
+                vk_u32 target_width = static_cast<vk_u32>(draw_width);
+                vk_u32 target_height = static_cast<vk_u32>(draw_height);
+
+                if (target_width < k_min_app_width) {
+                    target_width = k_min_app_width;
+                }
+                if (target_height < k_min_app_height) {
+                    target_height = k_min_app_height;
+                }
+
+                if (!resize_app_framebuffer(app, target_width, target_height)) {
+                    draw_width = static_cast<float>(app.width);
+                    draw_height = static_cast<float>(app.height);
+                } else {
+                    draw_width = static_cast<float>(app.width);
+                    draw_height = static_cast<float>(app.height);
+                }
             }
 
-            int draw_width = static_cast<int>(static_cast<float>(app.width) * scale);
-            int draw_height = static_cast<int>(static_cast<float>(app.height) * scale);
-            if (draw_width > static_cast<int>(available.x)) {
-                draw_width = static_cast<int>(available.x);
-            }
-            if (draw_height > static_cast<int>(available.y)) {
-                draw_height = static_cast<int>(available.y);
-            }
-            if (draw_width < 1) {
-                draw_width = 1;
-            }
-            if (draw_height < 1) {
-                draw_height = 1;
-            }
-
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (available.x - static_cast<float>(draw_width)) * 0.5f);
-            ImGui::InvisibleButton("##app_canvas", ImVec2(static_cast<float>(draw_width), static_cast<float>(draw_height)));
+            ImGui::InvisibleButton("##app_canvas",
+                                   ImVec2(draw_width, draw_height));
 
             const ImVec2 p_min = ImGui::GetItemRectMin();
             const ImVec2 p_max = ImGui::GetItemRectMax();

@@ -65,11 +65,13 @@ private:
     static constexpr int k_max_apps = 6;
 
     [[nodiscard]] static auto app_task_running(vk_i64 task_id) -> bool;
+    [[nodiscard]] static auto app_accepts_framebuffer_resize(vk_i64 task_id) -> bool;
     [[nodiscard]] auto focused_app_index() -> int;
     [[nodiscard]] auto find_free_app_slot() const -> int;
     void request_app_termination(const AppWindow& app);
     void release_app_slot(AppWindow& app);
     void capture_app_snapshot(AppWindow& app);
+    [[nodiscard]] auto resize_app_framebuffer(AppWindow& app, vk_u32 width, vk_u32 height) -> bool;
 
     ConsoleLog& log_;
     std::array<AppWindow, k_max_apps> apps_ {};

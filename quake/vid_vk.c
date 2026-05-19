@@ -137,8 +137,15 @@ void VID_UpdateTexture(SDL_Texture *texture, vrect_t *rect)
 {
     (void)texture;
 
-    if (!screen_buf || !vk_fb.valid || !vk_fb.base)
+    if (!screen_buf)
         return;
+
+    vk_framebuffer_info_t current_fb = {};
+    VK_CALL(framebuffer_info, &current_fb);
+    if (!current_fb.valid || !current_fb.base)
+        return;
+
+    vk_fb = current_fb;
 
     const int rw = (int)vid.width;
     const int rh = (int)vid.height;
@@ -191,14 +198,15 @@ void VID_InitWindow(void)
     if (!vk_fb.valid) {
         Sys_Error("VID_InitWindow: no valid VK framebuffer\n");
     }
+    vk_set_framebuffer_resize_events(1);
     fb_pixel_bytes = 4; /* VK framebuffers are always 32-bit */
 
-    /* Set render resolution to 320×200 (Quake default) */
-    vid.width  = 320;
-    vid.height = 200;
-    vid.aspect = (float)vid.height / (float)vid.width;
+    vid.width  = vk_fb.width;
+    vid.height = vk_fb.height;
+    vid.aspect = ((float)vid.height / (float)vid.width) * (320.0f / 240.0f);
     vid.numpages = 1;
     vid.colormap = host_colormap;
+    vid.recalc_refdef = true;
 }
 
 void VID_ShutdownWindow(void)
@@ -209,6 +217,30 @@ void VID_ShutdownWindow(void)
 void VID_ResizeScreen(void)
 {
     VID_ReallocBuffers();
+}
+
+void VID_NotifyFramebufferResize(i32 width, i32 height)
+{
+    if (width < 1 || height < 1) {
+        return;
+    }
+
+    VK_CALL(framebuffer_info, &vk_fb);
+    if (!vk_fb.valid) {
+        return;
+    }
+
+    if (vid.width == vk_fb.width && vid.height == vk_fb.height) {
+        return;
+    }
+
+    vid.width = vk_fb.width;
+    vid.height = vk_fb.height;
+    vid.aspect = ((float)vid.height / (float)vid.width) * (320.0f / 240.0f);
+    vid.numpages = 1;
+    vid.colormap = host_colormap;
+    vid.recalc_refdef = true;
+    VID_ResizeScreen();
 }
 
 void VID_UpdateWindow(vrect_t *rect)

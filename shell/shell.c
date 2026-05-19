@@ -918,25 +918,13 @@ static int shell_launch_program(const char* command_line, int verbose)
         return -1;
     }
 
-    if (vk_get_api()->vk_run_cmdline) {
-        if (!shell_build_resolved_command_line(resolved_path,
-                                               rest,
-                                               resolved_cmdline,
-                                               sizeof(resolved_cmdline))) {
-            if (verbose)
-                VK_CALL(puts, "run: command line too long\n");
-            return -1;
-        }
-        task_id = vk_get_api()->vk_run_cmdline(resolved_cmdline);
-    } else {
-        if (has_extra_args && verbose)
-            VK_CALL(puts, "run: kernel API too old, ignoring arguments.\n");
-
-        if (vk_get_api()->vk_run_auto)
-            task_id = vk_get_api()->vk_run_auto(resolved_path);
-        else
-            task_id = VK_CALL(run, resolved_path);
+    if (!shell_build_resolved_command_line(resolved_path, rest, resolved_cmdline, sizeof(resolved_cmdline))) {
+        if (verbose)
+            VK_CALL(puts, "run: command line too long\n");
+        return -1;
     }
+
+    task_id = vk_get_api()->vk_run_cmdline(resolved_cmdline);
 
     if (task_id < 0) {
         if (verbose) {

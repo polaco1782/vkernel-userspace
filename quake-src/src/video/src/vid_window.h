@@ -29,6 +29,7 @@ void VID_InitWindow(void);
 void VID_ShutdownWindow(void);
 
 void VID_ResizeScreen(void);
+void VID_NotifyFramebufferResize(i32 width, i32 height);
 
 void VID_UpdateWindow(vrect_t* rect);
 
