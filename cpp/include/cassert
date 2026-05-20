@@ -1,0 +1,6 @@
+#ifndef VKCPP_CASSERT_H
+#define VKCPP_CASSERT_H
+
+#include <assert.h>
+
+#endif

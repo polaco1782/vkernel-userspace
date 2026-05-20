@@ -1,0 +1,14 @@
+#ifndef VKCPP_CTIME_H
+#define VKCPP_CTIME_H
+
+#include <time.h>
+
+namespace std {
+using ::time_t;
+using ::time;
+using ::ctime;
+using ::localtime;
+using ::tm;
+}  // namespace std
+
+#endif

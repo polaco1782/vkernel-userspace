@@ -1,0 +1,21 @@
+#ifndef VKCPP_CMATH_H
+#define VKCPP_CMATH_H
+
+#include <math.h>
+#include <stdlib.h>
+
+namespace std {
+using ::abs;
+using ::ceil;
+using ::cos;
+using ::floor;
+using ::sin;
+using ::sqrt;
+
+inline double trunc(double value)
+{
+    return value < 0.0 ? ceil(value) : floor(value);
+}
+}  // namespace std
+
+#endif

@@ -1,0 +1,19 @@
+#ifndef VKCPP_CSTRING_H
+#define VKCPP_CSTRING_H
+
+#include <string.h>
+
+namespace std {
+using ::memcmp;
+using ::memcpy;
+using ::memmove;
+using ::memset;
+using ::strchr;
+using ::strcmp;
+using ::strcpy;
+using ::strlen;
+using ::strncmp;
+using ::strrchr;
+}  // namespace std
+
+#endif

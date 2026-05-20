@@ -1,0 +1,157 @@
+#ifndef VKCPP_FSTREAM_H
+#define VKCPP_FSTREAM_H
+
+#include <stdio.h>
+#include <string>
+
+namespace std {
+
+class ios_base {
+public:
+    enum openmode {
+        in = 1 << 0,
+        binary = 1 << 1
+    };
+
+    enum seekdir {
+        beg = SEEK_SET,
+        cur = SEEK_CUR,
+        end = SEEK_END
+    };
+};
+
+using ios = ios_base;
+
+class ifstream : public ios_base {
+public:
+    ifstream() noexcept : file_(nullptr), eof_(false), last_count_(0) {}
+
+    ifstream(const char* path, int mode) : ifstream()
+    {
+        open(path, mode);
+    }
+
+    ~ifstream()
+    {
+        close();
+    }
+
+    void open(const char* path, int mode)
+    {
+        close();
+        const char* fopen_mode = (mode & binary) ? "rb" : "r";
+        file_ = fopen(path, fopen_mode);
+        eof_ = false;
+        last_count_ = 0;
+    }
+
+    void close()
+    {
+        if (file_ != nullptr) {
+            fclose(file_);
+            file_ = nullptr;
+        }
+        eof_ = false;
+        last_count_ = 0;
+    }
+
+    void clear()
+    {
+        if (file_ != nullptr)
+            clearerr(file_);
+        eof_ = false;
+        last_count_ = 0;
+    }
+
+    bool good() const
+    {
+        return file_ != nullptr && !ferror(file_);
+    }
+
+    bool eof() const
+    {
+        return eof_;
+    }
+
+    bool is_open() const
+    {
+        return file_ != nullptr;
+    }
+
+    explicit operator bool() const
+    {
+        return good() && !eof_;
+    }
+
+    void seekg(long offset, seekdir dir)
+    {
+        if (file_ == nullptr)
+            return;
+        fseek(file_, offset, static_cast<int>(dir));
+        eof_ = false;
+    }
+
+    long tellg()
+    {
+        if (file_ == nullptr)
+            return -1;
+        return ftell(file_);
+    }
+
+    int get()
+    {
+        if (file_ == nullptr)
+            return EOF;
+        const int ch = fgetc(file_);
+        if (ch == EOF)
+            eof_ = true;
+        return ch;
+    }
+
+    void read(char* buffer, size_t count)
+    {
+        if (file_ == nullptr) {
+            last_count_ = 0;
+            return;
+        }
+        last_count_ = fread(buffer, 1, count, file_);
+        if (last_count_ < count)
+            eof_ = true;
+    }
+
+    size_t gcount() const
+    {
+        return last_count_;
+    }
+
+    FILE* native_handle() const
+    {
+        return file_;
+    }
+
+private:
+    FILE* file_;
+    bool eof_;
+    size_t last_count_;
+};
+
+inline ifstream& getline(ifstream& input, string& line)
+{
+    line.clear();
+    if (!input.is_open())
+        return input;
+
+    int ch = 0;
+    while ((ch = input.get()) != EOF) {
+        if (ch == '\n')
+            break;
+        if (ch != '\r')
+            line.push_back(static_cast<char>(ch));
+    }
+
+    return input;
+}
+
+}  // namespace std
+
+#endif

@@ -1,0 +1,18 @@
+#ifndef VKCPP_NUMERIC_H
+#define VKCPP_NUMERIC_H
+
+namespace std {
+
+template <typename Iterator, typename T>
+T accumulate(Iterator first, Iterator last, T init)
+{
+    while (first != last) {
+        init += *first;
+        ++first;
+    }
+    return init;
+}
+
+}  // namespace std
+
+#endif

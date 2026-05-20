@@ -88,6 +88,22 @@ auto WindowManager::app_accepts_framebuffer_resize(vk_i64 task_id) -> bool
     return vk_get_api()->vk_task_accepts_framebuffer_resize(static_cast<vk_u64>(task_id)) != 0;
 }
 
+auto WindowManager::app_startup_window_size(vk_i64 task_id, vk_u32& width, vk_u32& height) -> bool
+{
+    width = 0;
+    height = 0;
+
+    if (task_id < 0 || !vk_get_api()->vk_get_task_startup_window_size) {
+        return false;
+    }
+
+    return vk_get_api()->vk_get_task_startup_window_size(static_cast<vk_u64>(task_id),
+                                                         &width,
+                                                         &height) != 0
+        && width != 0
+        && height != 0;
+}
+
 auto WindowManager::focused_app_index() -> int
 {
     if (focused_app_ < 0 || focused_app_ >= k_max_apps) {
@@ -165,6 +181,7 @@ void WindowManager::release_app_slot(AppWindow& app)
     app.open = false;
     app.close_requested = false;
     app.focus_next = false;
+    app.startup_size_handled = false;
     app.task_id = -1;
     app.width = 0;
     app.height = 0;
@@ -368,9 +385,42 @@ void WindowManager::draw_windows()
         }
 
         const bool app_accepts_resize = app_accepts_framebuffer_resize(app.task_id);
-        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(app.width) + k_window_chrome_width,
-                                        static_cast<float>(app.height) + k_window_chrome_height),
-                                 ImGuiCond_FirstUseEver);
+        vk_u32 startup_width = app.width;
+        vk_u32 startup_height = app.height;
+        ImGuiCond startup_size_condition = ImGuiCond_FirstUseEver;
+
+        if (!app.startup_size_handled) {
+            vk_u32 requested_width = 0;
+            vk_u32 requested_height = 0;
+            if (app_startup_window_size(app.task_id, requested_width, requested_height)) {
+                if (app_accepts_resize) {
+                    if (requested_width < k_min_app_width) {
+                        requested_width = k_min_app_width;
+                    }
+                    if (requested_height < k_min_app_height) {
+                        requested_height = k_min_app_height;
+                    }
+
+                    if (resize_app_framebuffer(app, requested_width, requested_height)) {
+                        startup_width = app.width;
+                        startup_height = app.height;
+                    } else {
+                        startup_width = requested_width;
+                        startup_height = requested_height;
+                    }
+                } else {
+                    startup_width = requested_width;
+                    startup_height = requested_height;
+                }
+
+                startup_size_condition = ImGuiCond_Always;
+                app.startup_size_handled = true;
+            }
+        }
+
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(startup_width) + k_window_chrome_width,
+                                        static_cast<float>(startup_height) + k_window_chrome_height),
+                                 startup_size_condition);
         ImGui::SetNextWindowSizeConstraints(
             ImVec2((app_accepts_resize ? static_cast<float>(k_min_app_width) : 1.0f) + k_window_chrome_width,
                    (app_accepts_resize ? static_cast<float>(k_min_app_height) : 1.0f) + k_window_chrome_height),

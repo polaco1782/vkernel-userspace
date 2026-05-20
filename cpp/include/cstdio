@@ -1,0 +1,22 @@
+#ifndef VKCPP_CSTDIO_H
+#define VKCPP_CSTDIO_H
+
+#include <stdio.h>
+
+namespace std {
+using ::FILE;
+using ::fopen;
+using ::fclose;
+using ::fread;
+using ::fwrite;
+using ::fseek;
+using ::ftell;
+using ::fgetc;
+using ::clearerr;
+using ::ferror;
+using ::perror;
+using ::snprintf;
+using ::sprintf;
+}  // namespace std
+
+#endif

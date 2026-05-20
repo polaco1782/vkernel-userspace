@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <stdio.h>
 #include <string.h>
 #include <utility>
 #include <vector>
@@ -74,6 +75,11 @@ public:
         append(str);
     }
 
+    basic_string(const CharT* str, size_type count) : storage_(1, CharT())
+    {
+        append(str, count);
+    }
+
     basic_string(size_type count, CharT ch) : storage_(1, CharT())
     {
         resize(count, ch);
@@ -129,9 +135,13 @@ public:
     const_iterator begin() const noexcept { return storage_.data(); }
     iterator end() noexcept { return storage_.data() + size(); }
     const_iterator end() const noexcept { return storage_.data() + size(); }
+    iterator rbegin() noexcept { return size() == 0 ? storage_.data() : storage_.data() + size() - 1; }
+    const_iterator rbegin() const noexcept { return size() == 0 ? storage_.data() : storage_.data() + size() - 1; }
 
     reference operator[](size_type index) noexcept { return storage_[index]; }
     const_reference operator[](size_type index) const noexcept { return storage_[index]; }
+    reference at(size_type index) { return storage_[index]; }
+    const_reference at(size_type index) const { return storage_[index]; }
     reference front() noexcept { return storage_[0]; }
     const_reference front() const noexcept { return storage_[0]; }
     reference back() noexcept { return storage_[size() - 1]; }
@@ -184,6 +194,12 @@ public:
         return append(str, count);
     }
 
+    basic_string& assign(const basic_string& other, size_type pos, size_type count = npos)
+    {
+        clear();
+        return append(other.data() + pos, (count == npos || count > other.size() - pos) ? other.size() - pos : count);
+    }
+
     basic_string substr(size_type pos = 0, size_type count = npos) const
     {
         const size_type len = size();
@@ -209,6 +225,87 @@ public:
             --i;
         }
         return npos;
+    }
+
+    size_type find(CharT ch, size_type pos = 0) const noexcept
+    {
+        const size_type len = size();
+        for (size_type index = pos; index < len; ++index) {
+            if (storage_[index] == ch)
+                return index;
+        }
+        return npos;
+    }
+
+    size_type find(const CharT* str, size_type pos = 0) const noexcept
+    {
+        const size_type needle_len = traits_type::length(str);
+        const size_type len = size();
+        if (needle_len == 0)
+            return pos <= len ? pos : npos;
+        if (needle_len > len)
+            return npos;
+        for (size_type index = pos; index + needle_len <= len; ++index) {
+            if (traits_type::compare(data() + index, str, needle_len) == 0)
+                return index;
+        }
+        return npos;
+    }
+
+    size_type find_first_not_of(const CharT* chars, size_type pos = 0) const noexcept
+    {
+        const size_type len = size();
+        for (size_type index = pos; index < len; ++index) {
+            if (traits_type::find(chars, traits_type::length(chars), storage_[index]) == nullptr)
+                return index;
+        }
+        return npos;
+    }
+
+    size_type find_last_not_of(const CharT* chars, size_type pos = npos) const noexcept
+    {
+        const size_type len = size();
+        if (len == 0)
+            return npos;
+        size_type index = (pos == npos || pos >= len) ? len - 1 : pos;
+        while (true) {
+            if (traits_type::find(chars, traits_type::length(chars), storage_[index]) == nullptr)
+                return index;
+            if (index == 0)
+                break;
+            --index;
+        }
+        return npos;
+    }
+
+    size_type find_last_of(CharT ch, size_type pos = npos) const noexcept
+    {
+        return rfind(ch, pos);
+    }
+
+    basic_string& erase(size_type pos = 0, size_type count = npos)
+    {
+        const size_type len = size();
+        if (pos >= len)
+            return *this;
+        const size_type actual = (count == npos || count > len - pos) ? len - pos : count;
+        traits_type::move(storage_.data() + pos, storage_.data() + pos + actual, len - pos - actual + 1);
+        storage_.resize(len - actual + 1);
+        return *this;
+    }
+
+    basic_string& insert(size_type pos, size_type count, CharT ch)
+    {
+        if (count == 0)
+            return *this;
+        const size_type len = size();
+        if (pos > len)
+            pos = len;
+        storage_.resize(len + count + 1);
+        traits_type::move(storage_.data() + pos + count, storage_.data() + pos, len - pos + 1);
+        for (size_type index = 0; index < count; ++index)
+            storage_[pos + index] = ch;
+        return *this;
     }
 
     basic_string& append(const CharT* str)
@@ -264,6 +361,15 @@ public:
             return 0;
         }
         return size() < other.size() ? -1 : 1;
+    }
+
+    int compare(size_type pos1,
+                size_type count1,
+                const basic_string& other,
+                size_type pos2,
+                size_type count2) const noexcept
+    {
+        return substr(pos1, count1).compare(other.substr(pos2, count2));
     }
 
 private:
@@ -331,7 +437,86 @@ inline bool operator!=(const CharT* lhs,
     return !(lhs == rhs);
 }
 
+template <typename CharT, typename Traits, typename Alloc>
+inline bool operator<(const basic_string<CharT, Traits, Alloc>& lhs,
+                      const basic_string<CharT, Traits, Alloc>& rhs) noexcept
+{
+    return lhs.compare(rhs) < 0;
+}
+
 using string = basic_string<char>;
+
+inline string operator+(const string& lhs, const string& rhs)
+{
+    string result(lhs);
+    result += rhs;
+    return result;
+}
+
+inline string operator+(const char* lhs, const string& rhs)
+{
+    string result(lhs != nullptr ? lhs : "");
+    result += rhs;
+    return result;
+}
+
+inline string operator+(char lhs, const string& rhs)
+{
+    string result;
+    result.push_back(lhs);
+    result += rhs;
+    return result;
+}
+
+inline string operator+(const string& lhs, const char* rhs)
+{
+    string result(lhs);
+    if (rhs != nullptr)
+        result += rhs;
+    return result;
+}
+
+inline string to_string(int value)
+{
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%d", value);
+    return string(buffer);
+}
+
+inline string to_string(unsigned value)
+{
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%u", value);
+    return string(buffer);
+}
+
+inline string to_string(long value)
+{
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%ld", value);
+    return string(buffer);
+}
+
+inline string to_string(unsigned long value)
+{
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%lu", value);
+    return string(buffer);
+}
+
+inline string to_string(long long value)
+{
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%lld", value);
+    return string(buffer);
+}
+
+inline string to_string(unsigned long long value)
+{
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%llu", value);
+    return string(buffer);
+}
 
 }  // namespace std
 

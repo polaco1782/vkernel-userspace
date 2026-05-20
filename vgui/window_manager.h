@@ -52,6 +52,7 @@ private:
         bool open = false;
         bool close_requested = false;
         bool focus_next = false;
+        bool startup_size_handled = false;
         vk_i64 task_id = -1;
         vk_u32 width = 0;
         vk_u32 height = 0;
@@ -66,6 +67,7 @@ private:
 
     [[nodiscard]] static auto app_task_running(vk_i64 task_id) -> bool;
     [[nodiscard]] static auto app_accepts_framebuffer_resize(vk_i64 task_id) -> bool;
+    [[nodiscard]] static auto app_startup_window_size(vk_i64 task_id, vk_u32& width, vk_u32& height) -> bool;
     [[nodiscard]] auto focused_app_index() -> int;
     [[nodiscard]] auto find_free_app_slot() const -> int;
     void request_app_termination(const AppWindow& app);

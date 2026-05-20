@@ -57,6 +57,24 @@ static inline int vk_task_accepts_framebuffer_resize(vk_u64 task_id) {
     return 0;
 }
 
+static inline int vk_set_startup_window_size(vk_u32 width, vk_u32 height) {
+    if (vk_get_api()->vk_set_startup_window_size)
+        return vk_get_api()->vk_set_startup_window_size(width, height);
+    return 0;
+}
+
+static inline int vk_get_task_startup_window_size(vk_u64 task_id,
+                                                  vk_u32* out_width,
+                                                  vk_u32* out_height) {
+    if (out_width)
+        *out_width = 0;
+    if (out_height)
+        *out_height = 0;
+    if (vk_get_api()->vk_get_task_startup_window_size)
+        return vk_get_api()->vk_get_task_startup_window_size(task_id, out_width, out_height);
+    return 0;
+}
+
 static inline vk_usize vk_json_copy_escaped(char* out, vk_usize out_cap, vk_usize pos, const char* s) {
     vk_usize i = 0;
     if (!s) return pos;

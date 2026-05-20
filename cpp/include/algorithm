@@ -1,0 +1,43 @@
+#ifndef VKCPP_ALGORITHM_H
+#define VKCPP_ALGORITHM_H
+
+namespace std {
+
+template <typename T>
+struct less {
+    constexpr bool operator()(const T& lhs, const T& rhs) const
+    {
+        return lhs < rhs;
+    }
+};
+
+template <typename Iterator, typename T>
+void fill(Iterator first, Iterator last, const T& value)
+{
+    while (first != last) {
+        *first = value;
+        ++first;
+    }
+}
+
+template <typename Iterator, typename T, typename Compare>
+Iterator lower_bound(Iterator first, Iterator last, const T& value, Compare compare)
+{
+    using diff_t = long long;
+    diff_t count = static_cast<diff_t>(last - first);
+    while (count > 0) {
+        const diff_t step = count / 2;
+        Iterator it = first + step;
+        if (compare(*it, value)) {
+            first = ++it;
+            count -= step + 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+}  // namespace std
+
+#endif  // VKCPP_ALGORITHM_H

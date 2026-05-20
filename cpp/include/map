@@ -1,0 +1,102 @@
+#ifndef VKCPP_MAP_H
+#define VKCPP_MAP_H
+
+#include <algorithm>
+#include <utility>
+#include <vector>
+
+namespace std {
+
+template <typename Key, typename T, typename Compare = less<Key>>
+class map {
+public:
+    using value_type = pair<Key, T>;
+    using container_type = vector<value_type>;
+    using iterator = typename container_type::iterator;
+    using const_iterator = typename container_type::const_iterator;
+    using size_type = typename container_type::size_type;
+
+    iterator begin() noexcept { return values_.begin(); }
+    const_iterator begin() const noexcept { return values_.begin(); }
+    iterator end() noexcept { return values_.end(); }
+    const_iterator end() const noexcept { return values_.end(); }
+
+    bool empty() const noexcept { return values_.empty(); }
+    void clear() noexcept { values_.clear(); }
+
+    iterator find(const Key& key)
+    {
+        for (iterator it = begin(); it != end(); ++it) {
+            if (equal(it->first, key))
+                return it;
+        }
+        return end();
+    }
+
+    const_iterator find(const Key& key) const
+    {
+        for (const_iterator it = begin(); it != end(); ++it) {
+            if (equal(it->first, key))
+                return it;
+        }
+        return end();
+    }
+
+    size_type count(const Key& key) const
+    {
+        return find(key) == end() ? 0 : 1;
+    }
+
+    T& operator[](const Key& key)
+    {
+        iterator it = find(key);
+        if (it != end())
+            return it->second;
+
+        values_.push_back(value_type(key, T()));
+        return values_.back().second;
+    }
+
+    void insert(const value_type& value)
+    {
+        iterator it = find(value.first);
+        if (it != end()) {
+            it->second = value.second;
+            return;
+        }
+        values_.push_back(value);
+    }
+
+    size_type erase(const Key& key)
+    {
+        iterator it = find(key);
+        if (it == end())
+            return 0;
+        erase(it);
+        return 1;
+    }
+
+    iterator erase(iterator it)
+    {
+        if (it == end())
+            return it;
+
+        for (iterator cursor = it + 1; cursor != end(); ++cursor)
+            *(cursor - 1) = *cursor;
+        values_.pop_back();
+        return it;
+    }
+
+private:
+    bool equal(const Key& lhs, const Key& rhs) const
+    {
+        return !compare_(lhs, rhs) && !compare_(rhs, lhs);
+    }
+
+    container_type values_ {};
+    Compare compare_ {};
+};
+
+}  // namespace std
+
+#endif

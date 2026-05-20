@@ -33,6 +33,21 @@ void swap(T& lhs, T& rhs)
     rhs = std::move(temp);
 }
 
+template <typename T1, typename T2>
+struct pair {
+    T1 first;
+    T2 second;
+
+    pair() : first(), second() {}
+    pair(const T1& a, const T2& b) : first(a), second(b) {}
+};
+
+template <typename T1, typename T2>
+inline pair<T1, T2> make_pair(const T1& first, const T2& second)
+{
+    return pair<T1, T2>(first, second);
+}
+
 template <typename Container>
 constexpr auto size(const Container& container) -> decltype(container.size())
 {

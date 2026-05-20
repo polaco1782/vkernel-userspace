@@ -1,0 +1,9 @@
+#ifndef VKCPP_FILESYSTEM_H
+#define VKCPP_FILESYSTEM_H
+
+namespace std {
+namespace filesystem {
+}
+}  // namespace std
+
+#endif
