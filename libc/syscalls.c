@@ -308,7 +308,7 @@ int _fstat(int fd, struct stat* st)
         return -1;
     }
 
-    VK_CALL(memset, st, 0, sizeof(*st));
+    *st = (struct stat){0};
 
     if (fd <= VK_FD_STDERR) {
         st->st_mode = S_IFCHR;
@@ -332,7 +332,7 @@ int _stat(const char* path, struct stat* st)
         return -1;
     }
 
-    VK_CALL(memset, st, 0, sizeof(*st));
+    *st = (struct stat){0};
 
     if (VK_CALL(file_exists, path)) {
         st->st_mode = S_IFREG;

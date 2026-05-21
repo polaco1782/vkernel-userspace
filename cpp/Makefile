@@ -1,7 +1,6 @@
 CXX ?= g++
 AR  ?= ar
 
-SYSROOT     := ../sysroot
 CPP_INCLUDE := ./include
 
 CXXFLAGS  := -std=c++17
@@ -20,7 +19,6 @@ else
 CXXFLAGS  += -O2 -DNDEBUG
 endif
 CXXFLAGS  += -Wall -Wextra
-CXXFLAGS  += -isystem $(SYSROOT)/include
 CXXFLAGS  += -I$(CPP_INCLUDE)
 
 SRCS   := runtime/cxx_runtime.cpp \
@@ -30,14 +28,7 @@ TARGET := libvkcpp.a
 
 .PHONY: all clean
 
-all: _check_sysroot $(TARGET)
-
-_check_sysroot:
-	@test -f $(SYSROOT)/include/stdio.h || \
-	    { echo ""; \
-	      echo "  ERROR: newlib sysroot not found at $(SYSROOT)"; \
-	      echo "  Run:  bash ../../scripts/setup_newlib.sh"; \
-	      echo ""; exit 1; }
+all: $(TARGET)
 
 runtime/%.o: runtime/%.cpp
 	@echo "  CXX     $<"

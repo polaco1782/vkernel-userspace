@@ -3,7 +3,6 @@
 
 #include <cstddef>
 #include <new>
-#include <stdlib.h>
 #include <utility>
 
 namespace std {
@@ -28,7 +27,7 @@ public:
     T* allocate(size_t count)
     {
         if (count > max_size()) {
-            abort();
+            std::terminate();
         }
         return static_cast<T*>(::operator new(count * sizeof(T)));
     }

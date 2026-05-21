@@ -10,6 +10,7 @@ struct nothrow_t {
 };
 
 extern const nothrow_t nothrow;
+[[noreturn]] void terminate() noexcept;
 
 }  // namespace std
 

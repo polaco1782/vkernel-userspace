@@ -3,12 +3,84 @@
 
 #include <cstddef>
 #include <memory>
-#include <stdio.h>
-#include <string.h>
 #include <utility>
 #include <vector>
 
 namespace std {
+
+namespace detail {
+
+inline char* fill_chars(char* dst, size_t count, char ch) noexcept
+{
+    for (size_t index = 0; index < count; ++index) {
+        dst[index] = ch;
+    }
+    return dst;
+}
+
+inline int compare_chars(const char* lhs, const char* rhs, size_t count) noexcept
+{
+    for (size_t index = 0; index < count; ++index) {
+        const unsigned char left = static_cast<unsigned char>(lhs[index]);
+        const unsigned char right = static_cast<unsigned char>(rhs[index]);
+        if (left != right) {
+            return static_cast<int>(left) - static_cast<int>(right);
+        }
+    }
+    return 0;
+}
+
+inline size_t length_chars(const char* text) noexcept
+{
+    if (text == nullptr) {
+        return 0;
+    }
+
+    size_t length = 0;
+    while (text[length] != '\0') {
+        ++length;
+    }
+    return length;
+}
+
+inline const char* find_char(const char* text, size_t count, char ch) noexcept
+{
+    for (size_t index = 0; index < count; ++index) {
+        if (text[index] == ch) {
+            return text + index;
+        }
+    }
+    return nullptr;
+}
+
+inline char* move_chars(char* dst, const char* src, size_t count) noexcept
+{
+    if (dst == src || count == 0) {
+        return dst;
+    }
+
+    if (dst < src) {
+        for (size_t index = 0; index < count; ++index) {
+            dst[index] = src[index];
+        }
+        return dst;
+    }
+
+    for (size_t index = count; index > 0; --index) {
+        dst[index - 1] = src[index - 1];
+    }
+    return dst;
+}
+
+inline char* copy_chars(char* dst, const char* src, size_t count) noexcept
+{
+    for (size_t index = 0; index < count; ++index) {
+        dst[index] = src[index];
+    }
+    return dst;
+}
+
+}  // namespace detail
 
 template <typename CharT>
 struct char_traits;
@@ -22,7 +94,7 @@ struct char_traits<char> {
 
     static char* assign(char* dst, size_t count, char ch) noexcept
     {
-        return static_cast<char*>(memset(dst, ch, count));
+        return detail::fill_chars(dst, count, ch);
     }
 
     static bool eq(char lhs, char rhs) noexcept { return lhs == rhs; }
@@ -30,27 +102,27 @@ struct char_traits<char> {
 
     static int compare(const char* lhs, const char* rhs, size_t count) noexcept
     {
-        return memcmp(lhs, rhs, count);
+        return detail::compare_chars(lhs, rhs, count);
     }
 
     static size_t length(const char* str) noexcept
     {
-        return str == nullptr ? 0 : strlen(str);
+        return detail::length_chars(str);
     }
 
     static const char* find(const char* str, size_t count, const char& ch) noexcept
     {
-        return static_cast<const char*>(memchr(str, ch, count));
+        return detail::find_char(str, count, ch);
     }
 
     static char* move(char* dst, const char* src, size_t count) noexcept
     {
-        return static_cast<char*>(memmove(dst, src, count));
+        return detail::move_chars(dst, src, count);
     }
 
     static char* copy(char* dst, const char* src, size_t count) noexcept
     {
-        return static_cast<char*>(memcpy(dst, src, count));
+        return detail::copy_chars(dst, src, count);
     }
 };
 
@@ -446,6 +518,45 @@ inline bool operator<(const basic_string<CharT, Traits, Alloc>& lhs,
 
 using string = basic_string<char>;
 
+namespace detail {
+
+inline string unsigned_to_string(unsigned long long value)
+{
+    char buffer[32];
+    size_t length = 0;
+
+    if (value == 0) {
+        buffer[length++] = '0';
+    } else {
+        while (value > 0) {
+            buffer[length++] = static_cast<char>('0' + (value % 10ULL));
+            value /= 10ULL;
+        }
+    }
+
+    string result;
+    result.resize(length);
+    for (size_t index = 0; index < length; ++index) {
+        result[index] = buffer[length - index - 1];
+    }
+    return result;
+}
+
+inline string signed_to_string(long long value)
+{
+    if (value >= 0) {
+        return unsigned_to_string(static_cast<unsigned long long>(value));
+    }
+
+    string result("-");
+    const unsigned long long magnitude =
+        static_cast<unsigned long long>(-(value + 1LL)) + 1ULL;
+    result += unsigned_to_string(magnitude);
+    return result;
+}
+
+}  // namespace detail
+
 inline string operator+(const string& lhs, const string& rhs)
 {
     string result(lhs);
@@ -478,44 +589,32 @@ inline string operator+(const string& lhs, const char* rhs)
 
 inline string to_string(int value)
 {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%d", value);
-    return string(buffer);
+    return detail::signed_to_string(static_cast<long long>(value));
 }
 
 inline string to_string(unsigned value)
 {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%u", value);
-    return string(buffer);
+    return detail::unsigned_to_string(static_cast<unsigned long long>(value));
 }
 
 inline string to_string(long value)
 {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%ld", value);
-    return string(buffer);
+    return detail::signed_to_string(static_cast<long long>(value));
 }
 
 inline string to_string(unsigned long value)
 {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%lu", value);
-    return string(buffer);
+    return detail::unsigned_to_string(static_cast<unsigned long long>(value));
 }
 
 inline string to_string(long long value)
 {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%lld", value);
-    return string(buffer);
+    return detail::signed_to_string(value);
 }
 
 inline string to_string(unsigned long long value)
 {
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%llu", value);
-    return string(buffer);
+    return detail::unsigned_to_string(value);
 }
 
 }  // namespace std

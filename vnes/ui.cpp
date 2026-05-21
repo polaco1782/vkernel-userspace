@@ -6,6 +6,8 @@
 #include "../vgui/imgui/imgui.h"
 #include "../vgui/imgui_impl_vk.h"
 
+#include <cstdio>
+
 namespace vnes_frontend {
 
 namespace {

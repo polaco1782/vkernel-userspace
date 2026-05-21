@@ -1,71 +1,126 @@
 #include <iostream>
 
-#include <stdio.h>
-#include <string.h>
+#include "../../include/vk.h"
 
 namespace {
 
-auto write_buffer(std::ostream& stream, const char* buffer, int length) -> std::ostream&
+auto text_length(const char* text) -> std::size_t
 {
-    if (buffer == nullptr || length <= 0) {
-        return stream;
+    if (text == nullptr) {
+        return 0;
     }
 
-    return stream.write(buffer, static_cast<std::size_t>(length));
+    std::size_t length = 0;
+    while (text[length] != '\0') {
+        ++length;
+    }
+    return length;
 }
 
-auto write_signed(std::ostream& stream, long long value) -> std::ostream&
+void write_raw(const char* data, std::size_t count)
 {
-    char buffer[32];
-    return write_buffer(stream, buffer, snprintf(buffer, sizeof(buffer), "%lld", value));
+    if (data == nullptr || count == 0) {
+        return;
+    }
+
+    const vk_api_t* api = vk_get_api();
+    if (api == nullptr) {
+        return;
+    }
+
+    if (api->vk_stdio_write != nullptr) {
+        (void)api->vk_stdio_write(data, static_cast<vk_usize>(count));
+        return;
+    }
+
+    if (api->vk_putc != nullptr) {
+        for (std::size_t index = 0; index < count; ++index) {
+            api->vk_putc(data[index]);
+        }
+    }
 }
 
 auto write_unsigned(std::ostream& stream, unsigned long long value) -> std::ostream&
 {
+    char digits[32];
+    std::size_t length = 0;
+
+    if (value == 0) {
+        digits[length++] = '0';
+    } else {
+        while (value > 0) {
+            digits[length++] = static_cast<char>('0' + (value % 10ULL));
+            value /= 10ULL;
+        }
+    }
+
     char buffer[32];
-    return write_buffer(stream, buffer, snprintf(buffer, sizeof(buffer), "%llu", value));
+    for (std::size_t index = 0; index < length; ++index) {
+        buffer[index] = digits[length - index - 1];
+    }
+    return stream.write(buffer, length);
+}
+
+auto write_signed(std::ostream& stream, long long value) -> std::ostream&
+{
+    if (value < 0) {
+        stream.put('-');
+        const unsigned long long magnitude =
+            static_cast<unsigned long long>(-(value + 1LL)) + 1ULL;
+        return write_unsigned(stream, magnitude);
+    }
+
+    return write_unsigned(stream, static_cast<unsigned long long>(value));
 }
 
 auto write_pointer(std::ostream& stream, const void* value) -> std::ostream&
 {
-    char buffer[32];
-    return write_buffer(stream, buffer, snprintf(buffer, sizeof(buffer), "%p", value));
+    static constexpr char kHexDigits[] = "0123456789abcdef";
+
+    const unsigned long long raw =
+        static_cast<unsigned long long>(reinterpret_cast<unsigned long>(value));
+
+    char digits[2 + (sizeof(unsigned long long) * 2)];
+    std::size_t length = 0;
+
+    digits[length++] = '0';
+    digits[length++] = 'x';
+
+    bool seen_nonzero = false;
+    for (int shift = static_cast<int>(sizeof(unsigned long long) * 8) - 4;
+         shift >= 0;
+         shift -= 4) {
+        const unsigned digit = static_cast<unsigned>((raw >> shift) & 0xFULL);
+        if (digit != 0 || seen_nonzero || shift == 0) {
+            seen_nonzero = true;
+            digits[length++] = kHexDigits[digit];
+        }
+    }
+
+    return stream.write(digits, length);
 }
 
 }  // namespace
 
 namespace std {
 
-ostream cout(stdout);
-ostream cerr(stderr);
+ostream cout;
+ostream cerr;
 
 auto ostream::put(char ch) -> ostream&
 {
-    if (stream_ != nullptr) {
-        (void)fputc(static_cast<unsigned char>(ch), stream_);
-        if (ch == '\n') {
-            (void)fflush(stream_);
-        }
-    }
+    write_raw(&ch, 1);
     return *this;
 }
 
 auto ostream::write(const char* data, size_t count) -> ostream&
 {
-    if (stream_ != nullptr && data != nullptr && count != 0) {
-        (void)fwrite(data, 1, count, stream_);
-        if (data[count - 1] == '\n') {
-            (void)fflush(stream_);
-        }
-    }
+    write_raw(data, count);
     return *this;
 }
 
 void ostream::flush()
 {
-    if (stream_ != nullptr) {
-        (void)fflush(stream_);
-    }
 }
 
 auto operator<<(ostream& stream, ostream_manipulator manip) -> ostream&
@@ -78,7 +133,7 @@ auto operator<<(ostream& stream, const char* text) -> ostream&
     if (text == nullptr) {
         return stream.write("(null)", 6);
     }
-    return stream.write(text, strlen(text));
+    return stream.write(text, text_length(text));
 }
 
 auto operator<<(ostream& stream, const string& text) -> ostream&

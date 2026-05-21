@@ -17,6 +17,7 @@
 int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
+    void *p[10] = {0};
 
     const vk_api_t* api = vk_get_api();
 
@@ -31,14 +32,24 @@ int main(int argc, char** argv) {
 
     /* Test memory allocation */
     printf("  Allocating 128 bytes... ");
-    void* p = malloc(128);
-    if (p) {
-        printf("OK at %p\n", p);
-        memset(p, 0xAB, 128);
-        free(p);
-        printf("  Freed.\n");
-    } else {
-        printf("FAILED\n");
+
+    for(int i = 0; i < 10; i++) {
+        p[i] = malloc(1024*1024*1024); /* Allocate 1 MiB blocks */
+        VK_CALL(sleep, 50); /* Sleep for 50 ticks (0.5 seconds) */
+
+        if (p[i]) {
+            printf("malloc OK at %p\n", p[i]);
+            memset(p[i], 0xAB, 128);
+            printf("  Freed.\n");
+        } else {
+            printf("FAILED\n");
+        }
+    }
+
+    for(int i = 0; i < 10; i++) {
+        if (p[i]) {
+            free(p[i]);
+        }
     }
 
     FILE *f = fopen("hello.vbin", "r");
