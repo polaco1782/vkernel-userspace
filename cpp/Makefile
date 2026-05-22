@@ -3,7 +3,7 @@ AR  ?= ar
 
 CPP_INCLUDE := ./include
 
-CXXFLAGS  := -std=c++17
+CXXFLAGS  := -std=c++20
 CXXFLAGS  += -ffreestanding
 CXXFLAGS  += -fno-builtin
 CXXFLAGS  += -fno-stack-protector

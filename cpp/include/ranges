@@ -1,0 +1,170 @@
+#ifndef VKCPP_RANGES_H
+#define VKCPP_RANGES_H
+
+#include <array>
+#include <cstddef>
+#include <span>
+#include <utility>
+
+namespace std {
+
+namespace ranges {
+
+template <typename T, size_t N>
+constexpr auto begin(T (&arr)[N]) noexcept -> T*
+{
+    return arr;
+}
+
+template <typename T, size_t N>
+constexpr auto begin(const T (&arr)[N]) noexcept -> const T*
+{
+    return arr;
+}
+
+template <typename Range>
+constexpr auto begin(Range& range) -> decltype(range.begin())
+{
+    return range.begin();
+}
+
+template <typename Range>
+constexpr auto begin(const Range& range) -> decltype(range.begin())
+{
+    return range.begin();
+}
+
+template <typename T, size_t N>
+constexpr auto end(T (&arr)[N]) noexcept -> T*
+{
+    return arr + N;
+}
+
+template <typename T, size_t N>
+constexpr auto end(const T (&arr)[N]) noexcept -> const T*
+{
+    return arr + N;
+}
+
+template <typename Range>
+constexpr auto end(Range& range) -> decltype(range.end())
+{
+    return range.end();
+}
+
+template <typename Range>
+constexpr auto end(const Range& range) -> decltype(range.end())
+{
+    return range.end();
+}
+
+template <typename Range>
+constexpr auto size(Range& range) -> decltype(std::size(range))
+{
+    return std::size(range);
+}
+
+template <typename Range>
+constexpr auto size(const Range& range) -> decltype(std::size(range))
+{
+    return std::size(range);
+}
+
+template <typename T, size_t N>
+constexpr auto size(T (&)[N]) noexcept -> size_t
+{
+    return N;
+}
+
+template <typename T, size_t N>
+constexpr auto size(const T (&)[N]) noexcept -> size_t
+{
+    return N;
+}
+
+template <typename Range>
+constexpr auto data(Range& range) -> decltype(std::data(range))
+{
+    return std::data(range);
+}
+
+template <typename Range>
+constexpr auto data(const Range& range) -> decltype(std::data(range))
+{
+    return std::data(range);
+}
+
+template <typename T, size_t N>
+constexpr auto data(T (&arr)[N]) noexcept -> T*
+{
+    return arr;
+}
+
+template <typename T, size_t N>
+constexpr auto data(const T (&arr)[N]) noexcept -> const T*
+{
+    return arr;
+}
+
+template <typename Range>
+constexpr auto empty(Range& range) -> bool
+{
+    return ranges::begin(range) == ranges::end(range);
+}
+
+template <typename Range>
+constexpr auto empty(const Range& range) -> bool
+{
+    return ranges::begin(range) == ranges::end(range);
+}
+
+template <typename Iterator, typename Sentinel = Iterator>
+class subrange {
+public:
+    using iterator = Iterator;
+    using sentinel = Sentinel;
+    using size_type = size_t;
+
+    constexpr subrange() noexcept : begin_(), end_() {}
+
+    constexpr subrange(iterator first, sentinel last) noexcept
+        : begin_(first), end_(last) {}
+
+    template <typename Range>
+    constexpr subrange(Range& range) noexcept
+        : begin_(ranges::begin(range)), end_(ranges::end(range)) {}
+
+    template <typename Range>
+    constexpr subrange(const Range& range) noexcept
+        : begin_(ranges::begin(range)), end_(ranges::end(range)) {}
+
+    constexpr auto begin() const noexcept -> iterator { return begin_; }
+    constexpr auto end() const noexcept -> sentinel { return end_; }
+    constexpr auto empty() const noexcept -> bool { return begin_ == end_; }
+
+    constexpr auto size() const noexcept -> size_type
+    {
+        return static_cast<size_type>(end_ - begin_);
+    }
+
+private:
+    iterator begin_;
+    sentinel end_;
+};
+
+template <typename Iterator, typename Sentinel>
+subrange(Iterator, Sentinel) -> subrange<Iterator, Sentinel>;
+
+template <typename Range>
+subrange(Range&) -> subrange<decltype(ranges::begin(std::declval<Range&>())),
+                             decltype(ranges::end(std::declval<Range&>()))>;
+
+template <typename Range>
+subrange(const Range&) -> subrange<decltype(ranges::begin(std::declval<const Range&>())),
+                                   decltype(ranges::end(std::declval<const Range&>()))>;
+
+}  // namespace ranges
+
+}  // namespace std
+
+#endif  // VKCPP_RANGES_H

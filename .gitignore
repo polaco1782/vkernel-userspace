@@ -24,6 +24,7 @@ quake-src/src/memory/
 vgui/imgui/
 vgui/implot/
 vnes/build/
+shell/.build/
 
 # Local content that should not be committed
 clownmdemu/roms/
