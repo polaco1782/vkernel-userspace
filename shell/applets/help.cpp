@@ -24,11 +24,14 @@ static void run(const std::string& arg)
     (void)arg;
     std::cout << "Available commands:\n";
     const shell::command_list_view commands = shell::applet_commands();
-    for (const auto& command : std::span(commands.data, commands.count)) {
+    for (const shell::command_spec* command : std::span(commands.data, commands.count)) {
+        if (command == nullptr) {
+            continue;
+        }
         std::cout << "  ";
-        shell::put_padded(command.name, 12);
+        shell::put_padded(command->name, 12);
         std::cout << " - ";
-        std::cout << command.help;
+        std::cout << command->help;
         shell::put_char('\n');
     }
     std::cout << "  ?            - Alias for help\n";

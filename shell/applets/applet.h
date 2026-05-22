@@ -15,7 +15,7 @@ struct command_spec {
 };
 
 struct command_list_view {
-    const command_spec* data;
+    const command_spec* const* data;
     vk_usize count;
 };
 

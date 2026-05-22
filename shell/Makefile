@@ -36,7 +36,11 @@ CXXFLAGS  += -fno-exceptions
 CXXFLAGS  += -fno-rtti
 CXXFLAGS  += -nostdinc++
 CXXFLAGS  += -ffunction-sections -fdata-sections
-CXXFLAGS  += -O2
+ifdef DEBUG
+CXXFLAGS  += -Og -g3 -fno-omit-frame-pointer -DDEBUG
+else
+CXXFLAGS  += -O2 -DNDEBUG
+endif
 CXXFLAGS  += -Wall -Wextra
 CXXFLAGS  += -I$(USER_INCLUDE)
 CXXFLAGS  += -I$(CPP_INCLUDE)
@@ -68,10 +72,10 @@ $(APPLET_REGISTRY_SRC): $(APPLET_SRCS) $(APPLET_HEADER)
 			printf 'namespace applet::%s { extern const shell::command_spec kCommand; }\n' "$$name"; \
 		done; \
 		printf '\nnamespace shell {\nnamespace {\n'; \
-		printf 'const std::array<command_spec, %s> kAppletCommands = {{\n' "$(words $(APPLET_SRCS))"; \
+		printf 'constexpr std::array<const command_spec*, %s> kAppletCommands = {{\n' "$(words $(APPLET_SRCS))"; \
 		for src in $(APPLET_SRCS); do \
 			name=$$(basename "$$src" .cpp); \
-			printf '    applet::%s::kCommand,\n' "$$name"; \
+			printf '    &applet::%s::kCommand,\n' "$$name"; \
 		done; \
 		printf '}};\n'; \
 		printf '} // namespace\n\n'; \

@@ -45,8 +45,10 @@ template <typename Fn>
 static void shell_for_each_command(Fn&& fn)
 {
     const shell::command_list_view commands = shell::applet_commands();
-    for (const auto& command : std::span(commands.data, commands.count)) {
-        fn(command);
+    for (const shell::command_spec* command : std::span(commands.data, commands.count)) {
+        if (command != nullptr) {
+            fn(*command);
+        }
     }
 }
 
@@ -303,10 +305,10 @@ static auto parse_cmdline(const std::string& cmdline) -> int
     }
 
     if (command.text == "?") {
-        for (const auto& spec : std::span(shell::applet_commands().data,
-                                          shell::applet_commands().count)) {
-            if (std::string(spec.name) == "help") {
-                spec.fn(std::string());
+        for (const shell::command_spec* spec : std::span(shell::applet_commands().data,
+                                                         shell::applet_commands().count)) {
+            if (spec != nullptr && std::string(spec->name) == "help") {
+                spec->fn(std::string());
                 return 0;
             }
         }
@@ -315,7 +317,11 @@ static auto parse_cmdline(const std::string& cmdline) -> int
 
     int handled = 0;
     shell_for_each_command([&](const shell::command_spec& spec) {
-        if (handled != 0 || command.text != spec.name) {
+        if (handled != 0 || spec.name == nullptr) {
+            return;
+        }
+
+        if (command.text != std::string(spec.name)) {
             return;
         }
 
