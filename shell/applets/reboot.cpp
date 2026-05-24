@@ -20,7 +20,7 @@ extern const shell::command_spec kCommand = {
 static void run(const std::string& arg)
 {
     (void)arg;
-    vk_kobj_cmd_json("reboot");
+    vk_reboot();
 }
 
 }  // namespace applet::reboot

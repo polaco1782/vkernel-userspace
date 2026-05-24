@@ -27,7 +27,12 @@ static void run(const std::string& arg)
         return;
     }
 
-    vk_kobj_named_cmd_json("drvload", name.c_str());
+    const int rc = vk_driver_load(name.c_str());
+    if (rc != 0) {
+        std::cout << "drvload: failed to load ";
+        std::cout << name;
+        std::cout << '\n';
+    }
 }
 
 }  // namespace applet::drvload

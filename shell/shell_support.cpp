@@ -188,13 +188,9 @@ auto resolve_path_from(const std::string& base, const std::string& raw, std::str
 /* Queries the kernel for the shell's default filesystem root. */
 auto query_default_path() -> std::string
 {
-    char_buffer<160> response{};
     char_buffer<kPathMax> out{};
 
-    vk_kobj_rpc_path_json("get", "fs/root_path", response.data(), response.size());
-    if (vk_kobj_response_ok(response.data()) &&
-        vk_json_extract_string_field(response.data(), "value", out.data(), out.size()) &&
-        out[0] != '\0') {
+    if (vk_kobj_query("fs/root_path", out.data(), out.size(), nullptr) && out[0] != '\0') {
         return std::string(out.data());
     }
 

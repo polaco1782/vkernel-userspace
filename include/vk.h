@@ -75,6 +75,50 @@ static inline int vk_get_task_startup_window_size(vk_u64 task_id,
     return 0;
 }
 
+static inline int vk_kobj_query(const char* path,
+                                char* out_value,
+                                vk_usize out_value_cap,
+                                vk_kobj_node_info_t* out_info) {
+    if (vk_get_api()->vk_kobj_query)
+        return vk_get_api()->vk_kobj_query(path, out_value, out_value_cap, out_info);
+    if (out_value && out_value_cap > 0)
+        out_value[0] = '\0';
+    if (out_info)
+        __builtin_memset(out_info, 0, sizeof(*out_info));
+    return 0;
+}
+
+static inline vk_usize vk_kobj_list(const char* path,
+                                    vk_kobj_child_t* out_items,
+                                    vk_usize max_items) {
+    if (vk_get_api()->vk_kobj_list)
+        return vk_get_api()->vk_kobj_list(path, out_items, max_items);
+    return 0;
+}
+
+static inline int vk_kobj_set_value(const char* path, const char* value) {
+    if (vk_get_api()->vk_kobj_set_value)
+        return vk_get_api()->vk_kobj_set_value(path, value);
+    return 0;
+}
+
+static inline int vk_driver_load(const char* name) {
+    if (vk_get_api()->vk_driver_load)
+        return vk_get_api()->vk_driver_load(name);
+    return -1;
+}
+
+static inline int vk_driver_unload(const char* name) {
+    if (vk_get_api()->vk_driver_unload)
+        return vk_get_api()->vk_driver_unload(name);
+    return -1;
+}
+
+static inline void vk_reboot(void) {
+    if (vk_get_api()->vk_reboot)
+        vk_get_api()->vk_reboot();
+}
+
 static inline vk_usize vk_json_copy_escaped(char* out, vk_usize out_cap, vk_usize pos, const char* s) {
     vk_usize i = 0;
     if (!s) return pos;

@@ -6,6 +6,30 @@
 
 namespace vgui {
 
+static auto node_type_name(vk_u32 type) -> const char*
+{
+    switch (type) {
+    case VK_KOBJ_TYPE_U64:
+        return "u64";
+    case VK_KOBJ_TYPE_I64:
+        return "i64";
+    case VK_KOBJ_TYPE_BOOL:
+        return "bool";
+    case VK_KOBJ_TYPE_STR:
+        return "str";
+    case VK_KOBJ_TYPE_ENUM:
+        return "enum";
+    case VK_KOBJ_TYPE_STRUCT:
+        return "struct";
+    case VK_KOBJ_TYPE_STREAM:
+        return "stream";
+    case VK_KOBJ_TYPE_ERR:
+        return "err";
+    default:
+        return "unknown";
+    }
+}
+
 auto KobjNavigator::join_path(vk::string_view parent, vk::string_view child) const -> std::string
 {
     if (parent.empty()) {
@@ -18,63 +42,45 @@ auto KobjNavigator::join_path(vk::string_view parent, vk::string_view child) con
     return result;
 }
 
-auto KobjNavigator::list_items(vk::string_view path, std::array<std::string, k_items_max>& items) const -> int
+auto KobjNavigator::list_items(vk::string_view path, std::array<Item, k_items_max>& items) const -> int
 {
-    std::array<char, 1536> response {};
-    std::array<std::array<char, k_item_len>, k_items_max> raw_items {};
-
+    std::array<vk_kobj_child_t, k_items_max> raw_items {};
     const std::string path_string = string_from_view(path);
-    vk_kobj_rpc_path_json("ls", path_string.c_str(), response.data(), response.size());
+    const vk_usize total = vk_kobj_list(path_string.c_str(), raw_items.data(), raw_items.size());
+    const int count = static_cast<int>(total < raw_items.size() ? total : raw_items.size());
 
-    if (!vk_kobj_response_ok(response.data())) {
-        return 0;
-    }
-
-    const int count = vk_json_extract_string_array_field(response.data(),
-                                                         "items",
-                                                         raw_items[0].data(),
-                                                         k_item_len,
-                                                         k_items_max);
     for (int index = 0; index < count; ++index) {
-        items[index] = raw_items[index].data();
+        items[index].name = raw_items[index].name;
+        items[index].type = raw_items[index].type;
     }
+    sort_items(items, count);
     return count;
 }
 
-auto KobjNavigator::desc_get_field(vk::string_view key) const -> std::string
+void KobjNavigator::sort_items(std::array<Item, k_items_max>& items, int count)
 {
-    const vk::string_view text = string_view_of(desc_);
-    vk_usize line_start = 0;
-
-    while (line_start < text.size()) {
-        vk_usize line_end = line_start;
-        while (line_end < text.size() && text[line_end] != '\n') {
-            ++line_end;
-        }
-
-        const vk::string_view line = subview(text, line_start, line_end - line_start);
-        if (line.size() >= key.size() && subview(line, 0, key.size()).equals(key)) {
-            vk_usize value_start = key.size();
-            while (value_start < line.size()) {
-                const char ch = line[value_start];
-                if (ch != ' ' && ch != '\t' && ch != ':') {
-                    break;
-                }
-                ++value_start;
+    for (int index = 1; index < count; ++index) {
+        Item current = items[index];
+        int insert = index;
+        while (insert > 0) {
+            const bool current_struct = current.type == VK_KOBJ_TYPE_STRUCT;
+            const bool previous_struct = items[insert - 1].type == VK_KOBJ_TYPE_STRUCT;
+            const bool should_move = current_struct != previous_struct
+                ? current_struct
+                : current.name.compare(items[insert - 1].name) < 0;
+            if (!should_move) {
+                break;
             }
-
-            return trim_ascii(subview(line, value_start, line.size() - value_start));
+            items[insert] = items[insert - 1];
+            --insert;
         }
-
-        line_start = line_end < text.size() ? line_end + 1 : line_end;
+        items[insert] = current;
     }
-
-    return std::string();
 }
 
 void KobjNavigator::parse_edit_state()
 {
-    writable_ = false;
+    writable_ = info_.writable != 0;
     enum_count_ = 0;
     enum_selected_ = 0;
     has_range_ = false;
@@ -82,128 +88,109 @@ void KobjNavigator::parse_edit_state()
     range_max_ = 0;
     edit_value_.clear();
 
-    if (string_equals(desc_get_field("writable"), "yes")) {
-        writable_ = true;
-    }
     if (!writable_) {
         return;
     }
 
-    if (string_equals(type_, "enum")) {
-        const std::string labels = desc_get_field("labels");
-        const vk::string_view labels_view = string_view_of(labels);
-        vk_usize start = 0;
-
-        while (start < labels_view.size() && enum_count_ < k_enum_label_max) {
-            while (start < labels_view.size() && labels_view[start] == ' ') {
-                ++start;
-            }
-
-            vk_usize end = start;
-            while (end < labels_view.size() && labels_view[end] != ',') {
-                ++end;
-            }
-
-            enum_labels_[enum_count_++] = trim_ascii(subview(labels_view, start, end - start));
-            start = end < labels_view.size() ? end + 1 : end;
-        }
-
+    if (info_.type == VK_KOBJ_TYPE_ENUM) {
+        enum_count_ = static_cast<int>(info_.enum_count < k_enum_label_max ? info_.enum_count : k_enum_label_max);
         for (int index = 0; index < enum_count_; ++index) {
+            enum_labels_[index] = info_.enum_labels[index];
             if (enum_labels_[index].compare(value_) == 0) {
                 enum_selected_ = index;
-                break;
             }
         }
         return;
     }
 
-    const std::string range = desc_get_field("range");
-    if (!range.empty() && !string_equals(range, "(unbounded)")) {
-        const vk::string_view range_view = string_view_of(range);
-        const vk_usize dots = find_substring(range_view, "..");
-        if (dots != k_not_found) {
-            range_min_ = parse_i64(subview(range_view, 0, dots));
-            range_max_ = parse_i64(subview(range_view, dots + 2, range_view.size() - dots - 2));
-            has_range_ = range_max_ > range_min_;
-        }
+    if ((info_.type == VK_KOBJ_TYPE_U64 || info_.type == VK_KOBJ_TYPE_I64) && info_.range_max > info_.range_min) {
+        range_min_ = static_cast<long long>(info_.range_min);
+        range_max_ = static_cast<long long>(info_.range_max);
+        has_range_ = true;
     }
 
     edit_value_ = value_;
 }
 
-void KobjNavigator::refresh_selected()
+auto KobjNavigator::refresh_selected() -> bool
 {
-    std::array<char, 1536> response {};
     std::array<char, k_value_len> value_buffer {};
-    std::array<char, k_type_len> type_buffer {};
-    std::array<char, k_desc_len> desc_buffer {};
 
-    vk_kobj_rpc_path_json("get", selected_path_.c_str(), response.data(), response.size());
-    if (json_extract_string(response.data(), "value", value_buffer)) {
-        value_ = string_from_buffer(value_buffer);
+    info_ = {};
+    selected_valid_ = false;
+    if (vk_kobj_query(selected_path_.c_str(), value_buffer.data(), value_buffer.size(), &info_)) {
+        selected_valid_ = true;
+        if (info_.readable) {
+            value_ = string_from_buffer(value_buffer);
+        } else if (info_.type == VK_KOBJ_TYPE_STRUCT) {
+            value_ = "(struct)";
+        } else {
+            value_ = "(not readable)";
+        }
+        status_.clear();
     } else {
         value_ = "(unavailable)";
-    }
-
-    if (json_extract_string(response.data(), "type", type_buffer)) {
-        type_ = string_from_buffer(type_buffer);
-    } else {
-        type_ = "(unknown)";
-    }
-
-    vk_kobj_rpc_path_json("describe", selected_path_.c_str(), response.data(), response.size());
-    if (json_extract_string(response.data(), "text", desc_buffer)) {
-        desc_ = string_from_buffer(desc_buffer);
-    } else {
-        desc_ = "(no description)";
+        status_ = "Path not found.";
     }
 
     parse_edit_state();
     last_refresh_tick_ = VK_CALL(tick_count);
+    return selected_valid_;
 }
 
-void KobjNavigator::select_path(vk::string_view path)
+auto KobjNavigator::select_path(vk::string_view path) -> bool
 {
     const std::string path_string = string_from_view(path);
     if (path_string.empty()) {
-        return;
+        return false;
     }
 
     selected_path_ = path_string;
     path_input_ = selected_path_;
-    refresh_selected();
+    return refresh_selected();
 }
 
-void KobjNavigator::draw_tree_node(vk::string_view parent_path, const std::string& label, int depth)
+void KobjNavigator::draw_tree_node(vk::string_view parent_path, const Item& item, int depth)
 {
-    if (label.empty() || depth > 8) {
+    if (item.name.empty() || depth > 8) {
         return;
     }
 
-    const std::string path = join_path(parent_path, string_view_of(label));
+    const std::string path = join_path(parent_path, string_view_of(item.name));
+    const bool is_leaf = item.type != VK_KOBJ_TYPE_STRUCT;
 
     ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
     if (selected_path_.compare(path) == 0) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
+    if (is_leaf) {
+        flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+    }
 
-    const bool open = ImGui::TreeNodeEx(path.c_str(), flags, "%s", label.c_str());
+    const bool open = ImGui::TreeNodeEx(path.c_str(), flags, "%s", item.name.c_str());
     if (ImGui::IsItemClicked()) {
         select_path(string_view_of(path));
     }
 
-    if (open) {
-        std::array<std::string, k_items_max> children {};
-        const int child_count = list_items(string_view_of(path), children);
-        if (child_count == 0) {
-            ImGui::TextDisabled("(empty)");
-        } else {
-            for (int index = 0; index < child_count; ++index) {
-                draw_tree_node(string_view_of(path), children[index], depth + 1);
-            }
-        }
-        ImGui::TreePop();
+    if (!open || is_leaf) {
+        return;
     }
+
+    std::array<Item, k_items_max> children {};
+    const int child_count = list_items(string_view_of(path), children);
+    if (child_count == 0) {
+        ImGui::TextDisabled("(empty)");
+    } else {
+        for (int index = 0; index < child_count; ++index) {
+            draw_tree_node(string_view_of(path), children[index], depth + 1);
+        }
+    }
+    ImGui::TreePop();
+}
+
+auto KobjNavigator::status_text() const -> const char*
+{
+    return status_.empty() ? nullptr : status_.c_str();
 }
 
 void KobjNavigator::draw_window(bool& visible, WindowManager& window_manager)
@@ -240,11 +227,17 @@ void KobjNavigator::draw_window(bool& visible, WindowManager& window_manager)
     imgui_input_text("##kobj_path", path_input_);
     ImGui::SameLine();
     if (ImGui::Button("Go")) {
-        select_path(string_view_of(path_input_));
+        if (!select_path(string_view_of(path_input_))) {
+            status_ = "Unable to resolve that path.";
+        }
+    }
+
+    if (const char* status = status_text()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f), "%s", status);
     }
 
     ImGui::BeginChild("##kobj_tree", ImVec2(180.0f, 0.0f), true);
-    std::array<std::string, k_items_max> roots {};
+    std::array<Item, k_items_max> roots {};
     const int root_count = list_items("", roots);
     if (root_count == 0) {
         ImGui::TextDisabled("No kobj nodes.");
@@ -259,15 +252,37 @@ void KobjNavigator::draw_window(bool& visible, WindowManager& window_manager)
 
     ImGui::BeginChild("##kobj_detail", ImVec2(0.0f, 0.0f), true);
     ImGui::Text("Path: %s", selected_path_.c_str());
-    ImGui::Text("Type: %s", type_.empty() ? "(unknown)" : type_.c_str());
+    ImGui::Text("Type: %s", node_type_name(info_.type));
+    ImGui::Text("Status: %s", selected_valid_ ? "ok" : "missing");
+    ImGui::Text("Readable: %s", info_.readable ? "yes" : "no");
+    ImGui::Text("Writable: %s", info_.writable ? "yes" : "no");
+    ImGui::Text("Volatile: %s", info_.volatile_node ? "yes" : "no");
+    if (info_.unit[0] != '\0') {
+        ImGui::Text("Unit: %s", info_.unit);
+    }
+    if ((info_.type == VK_KOBJ_TYPE_U64 || info_.type == VK_KOBJ_TYPE_I64) && info_.range_max > info_.range_min) {
+        ImGui::Text("Range: %llu..%llu",
+                    static_cast<unsigned long long>(info_.range_min),
+                    static_cast<unsigned long long>(info_.range_max));
+    }
+    if (info_.type == VK_KOBJ_TYPE_ENUM && info_.enum_count > 0) {
+        ImGui::SeparatorText("Labels");
+        for (vk_u32 index = 0; index < info_.enum_count && index < k_enum_label_max; ++index) {
+            ImGui::TextUnformatted(info_.enum_labels[index]);
+        }
+    }
+
     ImGui::SeparatorText("Value");
-    ImGui::TextWrapped("%s", value_.empty() ? "(empty)" : value_.c_str());
+    if (info_.readable) {
+        ImGui::TextWrapped("%s", value_.empty() ? "(empty)" : value_.c_str());
+    } else {
+        ImGui::TextDisabled("(not readable)");
+    }
 
     if (writable_) {
         ImGui::SeparatorText("Edit");
-        std::array<char, 256> response {};
 
-        if (string_equals(type_, "enum") && enum_count_ > 0) {
+        if (info_.type == VK_KOBJ_TYPE_ENUM && enum_count_ > 0) {
             std::array<const char*, k_enum_label_max> items {};
             for (int index = 0; index < enum_count_; ++index) {
                 items[index] = enum_labels_[index].c_str();
@@ -275,24 +290,20 @@ void KobjNavigator::draw_window(bool& visible, WindowManager& window_manager)
 
             ImGui::SetNextItemWidth(-1.0f);
             if (ImGui::Combo("##kobj_enum", &enum_selected_, items.data(), enum_count_)) {
-                vk_kobj_rpc_path_value_json("set",
-                                            selected_path_.c_str(),
-                                            enum_labels_[enum_selected_].c_str(),
-                                            response.data(),
-                                            response.size());
+                if (!vk_kobj_set_value(selected_path_.c_str(), enum_labels_[enum_selected_].c_str())) {
+                    status_ = "Set failed.";
+                }
                 refresh_selected();
             }
-        } else if (string_equals(type_, "bool")) {
+        } else if (info_.type == VK_KOBJ_TYPE_BOOL) {
             bool current = string_equals(value_, "yes") || string_equals(value_, "true");
             if (ImGui::Checkbox("Enabled##kobj_bool", &current)) {
-                vk_kobj_rpc_path_value_json("set",
-                                            selected_path_.c_str(),
-                                            current ? "true" : "false",
-                                            response.data(),
-                                            response.size());
+                if (!vk_kobj_set_value(selected_path_.c_str(), current ? "true" : "false")) {
+                    status_ = "Set failed.";
+                }
                 refresh_selected();
             }
-        } else if ((string_equals(type_, "u64") || string_equals(type_, "i64")) && has_range_) {
+        } else if ((info_.type == VK_KOBJ_TYPE_U64 || info_.type == VK_KOBJ_TYPE_I64) && has_range_) {
             int current = static_cast<int>(parse_i64(string_view_of(value_)));
             const int min_value = static_cast<int>(range_min_);
             const int max_value = static_cast<int>(range_max_);
@@ -303,11 +314,9 @@ void KobjNavigator::draw_window(bool& visible, WindowManager& window_manager)
             }
             ImGui::SameLine();
             if (ImGui::Button("Set##kobj_range")) {
-                vk_kobj_rpc_path_value_json("set",
-                                            selected_path_.c_str(),
-                                            edit_value_.c_str(),
-                                            response.data(),
-                                            response.size());
+                if (!vk_kobj_set_value(selected_path_.c_str(), edit_value_.c_str())) {
+                    status_ = "Set failed.";
+                }
                 refresh_selected();
             }
         } else {
@@ -315,20 +324,15 @@ void KobjNavigator::draw_window(bool& visible, WindowManager& window_manager)
             imgui_input_text("##kobj_edit", edit_value_);
             ImGui::SameLine();
             if (ImGui::Button("Set##kobj_text")) {
-                vk_kobj_rpc_path_value_json("set",
-                                            selected_path_.c_str(),
-                                            edit_value_.c_str(),
-                                            response.data(),
-                                            response.size());
+                if (!vk_kobj_set_value(selected_path_.c_str(), edit_value_.c_str())) {
+                    status_ = "Set failed.";
+                }
                 refresh_selected();
             }
         }
     }
 
-    ImGui::SeparatorText("Describe");
-    ImGui::TextWrapped("%s", desc_.empty() ? "(no description)" : desc_.c_str());
     ImGui::EndChild();
-
     ImGui::End();
 }
 

@@ -59,11 +59,9 @@ auto TaskManagerPanel::task_cpu_delta(const vk_task_info_t& task,
 
 auto TaskManagerPanel::query_cpu_count() const -> vk_u32
 {
-    std::array<char, 128> response {};
     std::array<char, 32> value {};
 
-    vk_kobj_rpc_json("{\"op\":\"get\",\"path\":\"sys/cpu/count\"}", response.data(), response.size());
-    if (!json_extract_string(response.data(), "value", value)) {
+    if (!vk_kobj_query("sys/cpu/count", value.data(), value.size(), nullptr)) {
         return cpu_count_ != 0 ? cpu_count_ : 1u;
     }
 
