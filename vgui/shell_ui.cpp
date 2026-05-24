@@ -12,6 +12,73 @@
 namespace vgui {
 
 namespace {
+struct RgbColor {
+    unsigned int r;
+    unsigned int g;
+    unsigned int b;
+};
+
+[[nodiscard]] constexpr auto hex_digit_value(char digit) -> unsigned int
+{
+    if (digit >= '0' && digit <= '9') {
+        return static_cast<unsigned int>(digit - '0');
+    }
+    if (digit >= 'a' && digit <= 'f') {
+        return static_cast<unsigned int>(digit - 'a' + 10);
+    }
+    if (digit >= 'A' && digit <= 'F') {
+        return static_cast<unsigned int>(digit - 'A' + 10);
+    }
+    return 0;
+}
+
+[[nodiscard]] constexpr auto is_hex_digit(char digit) -> bool
+{
+    return (digit >= '0' && digit <= '9')
+        || (digit >= 'a' && digit <= 'f')
+        || (digit >= 'A' && digit <= 'F');
+}
+
+[[nodiscard]] auto parse_rgb_hex(vk::string_view hex_string) -> RgbColor
+{
+    if (hex_string.size() != 7 || hex_string[0] != '#') {
+        return {0, 0, 0};
+    }
+    for (vk_u32 index = 1; index < hex_string.size(); ++index) {
+        if (!is_hex_digit(hex_string[index])) {
+            return {0, 0, 0};
+        }
+    }
+
+    /* Accept #RRGGBB and keep the fallback deterministic for malformed input. */
+    return {
+        (hex_digit_value(hex_string[1]) << 4) | hex_digit_value(hex_string[2]),
+        (hex_digit_value(hex_string[3]) << 4) | hex_digit_value(hex_string[4]),
+        (hex_digit_value(hex_string[5]) << 4) | hex_digit_value(hex_string[6]),
+    };
+}
+
+[[nodiscard]] constexpr auto from_rgb(float r, float g, float b, float a) -> ImVec4
+{
+    /* Our renderer path expects ImGui colors pre-swizzled to BGR. */
+    return ImVec4(b, g, r, a);
+}
+
+[[nodiscard]] auto FROM_HEX(vk::string_view hex, float alpha) -> ImVec4
+{
+    const RgbColor color = parse_rgb_hex(hex);
+    return from_rgb((float)color.r / 255.0f,
+                    (float)color.g / 255.0f,
+                    (float)color.b / 255.0f,
+                    alpha);
+
+} // namespace
+
+void ImGui_ImplVK_SetClearColor(vk::string_view hex_string)
+{
+    const auto color = parse_rgb_hex(hex_string);
+    ::ImGui_ImplVK_SetClearColor(color.b, color.g, color.r);
+}
 
 void apply_scheme_ocean()
 {
@@ -19,27 +86,27 @@ void apply_scheme_ocean()
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    colors[ImGuiCol_WindowBg] = ImVec4(0.05f, 0.08f, 0.12f, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.04f, 0.07f, 0.10f, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.06f, 0.09f, 0.14f, colors[ImGuiCol_PopupBg].w);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.03f, 0.20f, 0.26f, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.04f, 0.28f, 0.35f, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_Header] = ImVec4(0.08f, 0.33f, 0.46f, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.12f, 0.41f, 0.56f, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.14f, 0.46f, 0.62f, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Button] = ImVec4(0.07f, 0.36f, 0.50f, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.11f, 0.45f, 0.61f, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.14f, 0.50f, 0.68f, colors[ImGuiCol_ButtonActive].w);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.08f, 0.15f, 0.22f, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.12f, 0.23f, 0.32f, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.13f, 0.27f, 0.38f, colors[ImGuiCol_FrameBgActive].w);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.24f, 0.64f, 0.82f, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.30f, 0.74f, 0.92f, colors[ImGuiCol_SliderGrabActive].w);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.36f, 0.80f, 0.94f, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_Separator] = ImVec4(0.18f, 0.34f, 0.44f, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.22f, 0.56f, 0.72f, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_Tab] = ImVec4(0.07f, 0.24f, 0.34f, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabActive] = ImVec4(0.10f, 0.35f, 0.49f, colors[ImGuiCol_TabActive].w);
+    colors[ImGuiCol_WindowBg] = from_rgb(0.05f, 0.08f, 0.12f, colors[ImGuiCol_WindowBg].w);
+    colors[ImGuiCol_ChildBg] = from_rgb(0.04f, 0.07f, 0.10f, colors[ImGuiCol_ChildBg].w);
+    colors[ImGuiCol_PopupBg] = from_rgb(0.06f, 0.09f, 0.14f, colors[ImGuiCol_PopupBg].w);
+    colors[ImGuiCol_TitleBg] = from_rgb(0.03f, 0.20f, 0.26f, colors[ImGuiCol_TitleBg].w);
+    colors[ImGuiCol_TitleBgActive] = from_rgb(0.04f, 0.28f, 0.35f, colors[ImGuiCol_TitleBgActive].w);
+    colors[ImGuiCol_Header] = from_rgb(0.08f, 0.33f, 0.46f, colors[ImGuiCol_Header].w);
+    colors[ImGuiCol_HeaderHovered] = from_rgb(0.12f, 0.41f, 0.56f, colors[ImGuiCol_HeaderHovered].w);
+    colors[ImGuiCol_HeaderActive] = from_rgb(0.14f, 0.46f, 0.62f, colors[ImGuiCol_HeaderActive].w);
+    colors[ImGuiCol_Button] = from_rgb(0.07f, 0.36f, 0.50f, colors[ImGuiCol_Button].w);
+    colors[ImGuiCol_ButtonHovered] = from_rgb(0.11f, 0.45f, 0.61f, colors[ImGuiCol_ButtonHovered].w);
+    colors[ImGuiCol_ButtonActive] = from_rgb(0.14f, 0.50f, 0.68f, colors[ImGuiCol_ButtonActive].w);
+    colors[ImGuiCol_FrameBg] = from_rgb(0.08f, 0.15f, 0.22f, colors[ImGuiCol_FrameBg].w);
+    colors[ImGuiCol_FrameBgHovered] = from_rgb(0.12f, 0.23f, 0.32f, colors[ImGuiCol_FrameBgHovered].w);
+    colors[ImGuiCol_FrameBgActive] = from_rgb(0.13f, 0.27f, 0.38f, colors[ImGuiCol_FrameBgActive].w);
+    colors[ImGuiCol_SliderGrab] = from_rgb(0.24f, 0.64f, 0.82f, colors[ImGuiCol_SliderGrab].w);
+    colors[ImGuiCol_SliderGrabActive] = from_rgb(0.30f, 0.74f, 0.92f, colors[ImGuiCol_SliderGrabActive].w);
+    colors[ImGuiCol_CheckMark] = from_rgb(0.36f, 0.80f, 0.94f, colors[ImGuiCol_CheckMark].w);
+    colors[ImGuiCol_Separator] = from_rgb(0.18f, 0.34f, 0.44f, colors[ImGuiCol_Separator].w);
+    colors[ImGuiCol_ResizeGrip] = from_rgb(0.22f, 0.56f, 0.72f, colors[ImGuiCol_ResizeGrip].w);
+    colors[ImGuiCol_Tab] = from_rgb(0.07f, 0.24f, 0.34f, colors[ImGuiCol_Tab].w);
+    colors[ImGuiCol_TabActive] = from_rgb(0.10f, 0.35f, 0.49f, colors[ImGuiCol_TabActive].w);
 }
 
 void apply_scheme_forest()
@@ -48,27 +115,27 @@ void apply_scheme_forest()
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    colors[ImGuiCol_WindowBg] = ImVec4(0.07f, 0.10f, 0.08f, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.05f, 0.08f, 0.06f, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.12f, 0.09f, colors[ImGuiCol_PopupBg].w);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.12f, 0.22f, 0.15f, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.15f, 0.30f, 0.19f, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_Header] = ImVec4(0.17f, 0.32f, 0.20f, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.22f, 0.40f, 0.25f, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.25f, 0.45f, 0.27f, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Button] = ImVec4(0.16f, 0.36f, 0.22f, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.22f, 0.45f, 0.27f, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.26f, 0.52f, 0.31f, colors[ImGuiCol_ButtonActive].w);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.11f, 0.17f, 0.12f, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.16f, 0.25f, 0.17f, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.19f, 0.29f, 0.20f, colors[ImGuiCol_FrameBgActive].w);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.45f, 0.71f, 0.35f, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.55f, 0.80f, 0.44f, colors[ImGuiCol_SliderGrabActive].w);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.63f, 0.86f, 0.45f, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_Separator] = ImVec4(0.24f, 0.35f, 0.25f, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.33f, 0.55f, 0.36f, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_Tab] = ImVec4(0.12f, 0.21f, 0.14f, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabActive] = ImVec4(0.21f, 0.36f, 0.24f, colors[ImGuiCol_TabActive].w);
+    colors[ImGuiCol_WindowBg] = from_rgb(0.07f, 0.10f, 0.08f, colors[ImGuiCol_WindowBg].w);
+    colors[ImGuiCol_ChildBg] = from_rgb(0.05f, 0.08f, 0.06f, colors[ImGuiCol_ChildBg].w);
+    colors[ImGuiCol_PopupBg] = from_rgb(0.08f, 0.12f, 0.09f, colors[ImGuiCol_PopupBg].w);
+    colors[ImGuiCol_TitleBg] = from_rgb(0.12f, 0.22f, 0.15f, colors[ImGuiCol_TitleBg].w);
+    colors[ImGuiCol_TitleBgActive] = from_rgb(0.15f, 0.30f, 0.19f, colors[ImGuiCol_TitleBgActive].w);
+    colors[ImGuiCol_Header] = from_rgb(0.17f, 0.32f, 0.20f, colors[ImGuiCol_Header].w);
+    colors[ImGuiCol_HeaderHovered] = from_rgb(0.22f, 0.40f, 0.25f, colors[ImGuiCol_HeaderHovered].w);
+    colors[ImGuiCol_HeaderActive] = from_rgb(0.25f, 0.45f, 0.27f, colors[ImGuiCol_HeaderActive].w);
+    colors[ImGuiCol_Button] = from_rgb(0.16f, 0.36f, 0.22f, colors[ImGuiCol_Button].w);
+    colors[ImGuiCol_ButtonHovered] = from_rgb(0.22f, 0.45f, 0.27f, colors[ImGuiCol_ButtonHovered].w);
+    colors[ImGuiCol_ButtonActive] = from_rgb(0.26f, 0.52f, 0.31f, colors[ImGuiCol_ButtonActive].w);
+    colors[ImGuiCol_FrameBg] = from_rgb(0.11f, 0.17f, 0.12f, colors[ImGuiCol_FrameBg].w);
+    colors[ImGuiCol_FrameBgHovered] = from_rgb(0.16f, 0.25f, 0.17f, colors[ImGuiCol_FrameBgHovered].w);
+    colors[ImGuiCol_FrameBgActive] = from_rgb(0.19f, 0.29f, 0.20f, colors[ImGuiCol_FrameBgActive].w);
+    colors[ImGuiCol_SliderGrab] = from_rgb(0.45f, 0.71f, 0.35f, colors[ImGuiCol_SliderGrab].w);
+    colors[ImGuiCol_SliderGrabActive] = from_rgb(0.55f, 0.80f, 0.44f, colors[ImGuiCol_SliderGrabActive].w);
+    colors[ImGuiCol_CheckMark] = from_rgb(0.63f, 0.86f, 0.45f, colors[ImGuiCol_CheckMark].w);
+    colors[ImGuiCol_Separator] = from_rgb(0.24f, 0.35f, 0.25f, colors[ImGuiCol_Separator].w);
+    colors[ImGuiCol_ResizeGrip] = from_rgb(0.33f, 0.55f, 0.36f, colors[ImGuiCol_ResizeGrip].w);
+    colors[ImGuiCol_Tab] = from_rgb(0.12f, 0.21f, 0.14f, colors[ImGuiCol_Tab].w);
+    colors[ImGuiCol_TabActive] = from_rgb(0.21f, 0.36f, 0.24f, colors[ImGuiCol_TabActive].w);
 }
 
 void apply_scheme_sunset()
@@ -77,27 +144,27 @@ void apply_scheme_sunset()
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    colors[ImGuiCol_WindowBg] = ImVec4(0.14f, 0.09f, 0.10f, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = ImVec4(0.12f, 0.07f, 0.08f, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = ImVec4(0.16f, 0.10f, 0.11f, colors[ImGuiCol_PopupBg].w);
-    colors[ImGuiCol_TitleBg] = ImVec4(0.31f, 0.15f, 0.12f, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.40f, 0.20f, 0.16f, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_Header] = ImVec4(0.45f, 0.24f, 0.17f, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.53f, 0.30f, 0.20f, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = ImVec4(0.59f, 0.35f, 0.22f, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Button] = ImVec4(0.47f, 0.24f, 0.15f, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.56f, 0.30f, 0.18f, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = ImVec4(0.64f, 0.35f, 0.20f, colors[ImGuiCol_ButtonActive].w);
-    colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.12f, 0.11f, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.29f, 0.17f, 0.14f, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.35f, 0.20f, 0.16f, colors[ImGuiCol_FrameBgActive].w);
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.88f, 0.52f, 0.23f, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.97f, 0.61f, 0.28f, colors[ImGuiCol_SliderGrabActive].w);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.99f, 0.73f, 0.35f, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_Separator] = ImVec4(0.41f, 0.24f, 0.17f, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.67f, 0.37f, 0.21f, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_Tab] = ImVec4(0.24f, 0.13f, 0.11f, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabActive] = ImVec4(0.40f, 0.22f, 0.15f, colors[ImGuiCol_TabActive].w);
+    colors[ImGuiCol_WindowBg] = from_rgb(0.14f, 0.09f, 0.10f, colors[ImGuiCol_WindowBg].w);
+    colors[ImGuiCol_ChildBg] = from_rgb(0.12f, 0.07f, 0.08f, colors[ImGuiCol_ChildBg].w);
+    colors[ImGuiCol_PopupBg] = from_rgb(0.16f, 0.10f, 0.11f, colors[ImGuiCol_PopupBg].w);
+    colors[ImGuiCol_TitleBg] = from_rgb(0.31f, 0.15f, 0.12f, colors[ImGuiCol_TitleBg].w);
+    colors[ImGuiCol_TitleBgActive] = from_rgb(0.40f, 0.20f, 0.16f, colors[ImGuiCol_TitleBgActive].w);
+    colors[ImGuiCol_Header] = from_rgb(0.45f, 0.24f, 0.17f, colors[ImGuiCol_Header].w);
+    colors[ImGuiCol_HeaderHovered] = from_rgb(0.53f, 0.30f, 0.20f, colors[ImGuiCol_HeaderHovered].w);
+    colors[ImGuiCol_HeaderActive] = from_rgb(0.59f, 0.35f, 0.22f, colors[ImGuiCol_HeaderActive].w);
+    colors[ImGuiCol_Button] = from_rgb(0.47f, 0.24f, 0.15f, colors[ImGuiCol_Button].w);
+    colors[ImGuiCol_ButtonHovered] = from_rgb(0.56f, 0.30f, 0.18f, colors[ImGuiCol_ButtonHovered].w);
+    colors[ImGuiCol_ButtonActive] = from_rgb(0.64f, 0.35f, 0.20f, colors[ImGuiCol_ButtonActive].w);
+    colors[ImGuiCol_FrameBg] = from_rgb(0.20f, 0.12f, 0.11f, colors[ImGuiCol_FrameBg].w);
+    colors[ImGuiCol_FrameBgHovered] = from_rgb(0.29f, 0.17f, 0.14f, colors[ImGuiCol_FrameBgHovered].w);
+    colors[ImGuiCol_FrameBgActive] = from_rgb(0.35f, 0.20f, 0.16f, colors[ImGuiCol_FrameBgActive].w);
+    colors[ImGuiCol_SliderGrab] = from_rgb(0.88f, 0.52f, 0.23f, colors[ImGuiCol_SliderGrab].w);
+    colors[ImGuiCol_SliderGrabActive] = from_rgb(0.97f, 0.61f, 0.28f, colors[ImGuiCol_SliderGrabActive].w);
+    colors[ImGuiCol_CheckMark] = from_rgb(0.99f, 0.73f, 0.35f, colors[ImGuiCol_CheckMark].w);
+    colors[ImGuiCol_Separator] = from_rgb(0.41f, 0.24f, 0.17f, colors[ImGuiCol_Separator].w);
+    colors[ImGuiCol_ResizeGrip] = from_rgb(0.67f, 0.37f, 0.21f, colors[ImGuiCol_ResizeGrip].w);
+    colors[ImGuiCol_Tab] = from_rgb(0.24f, 0.13f, 0.11f, colors[ImGuiCol_Tab].w);
+    colors[ImGuiCol_TabActive] = from_rgb(0.40f, 0.22f, 0.15f, colors[ImGuiCol_TabActive].w);
 }
 
 void apply_scheme_win9x()
@@ -106,54 +173,52 @@ void apply_scheme_win9x()
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    const auto win9x_rgb = [](int r, int g, int b, float a) {
-        /* Our software path currently interprets ImGui vertex channels as BGR. */
-        return ImVec4((float)b / 255.0f, (float)g / 255.0f, (float)r / 255.0f, a);
-    };
+    colors[ImGuiCol_Text] = FROM_HEX("#000000", colors[ImGuiCol_Text].w);
+    colors[ImGuiCol_TextDisabled] = FROM_HEX("#7F7F7F", colors[ImGuiCol_TextDisabled].w);
 
-    colors[ImGuiCol_Text] = win9x_rgb(0, 0, 0, colors[ImGuiCol_Text].w);
-    colors[ImGuiCol_TextDisabled] = win9x_rgb(90, 90, 90, colors[ImGuiCol_TextDisabled].w);
-
-    /* Windows and controls stay classic gray (#C0C0C0). */
-    colors[ImGuiCol_WindowBg] = win9x_rgb(192, 192, 192, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = win9x_rgb(192, 192, 192, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = win9x_rgb(192, 192, 192, colors[ImGuiCol_PopupBg].w);
+    /* Windows and controls stay classic gray (#d4d0c8). */
+    colors[ImGuiCol_WindowBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_WindowBg].w);
+    colors[ImGuiCol_ChildBg] = FROM_HEX("#FFFFFF", colors[ImGuiCol_ChildBg].w);
+    colors[ImGuiCol_PopupBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_PopupBg].w);
 
     /* 3D cue: white highlight and dark gray shadow. */
-    colors[ImGuiCol_Border] = win9x_rgb(79, 79, 79, colors[ImGuiCol_Border].w);
-    colors[ImGuiCol_BorderShadow] = win9x_rgb(255, 255, 255, colors[ImGuiCol_BorderShadow].w);
+    colors[ImGuiCol_Border] = FROM_HEX("#4F4F4F", colors[ImGuiCol_Border].w);
+    colors[ImGuiCol_BorderShadow] = FROM_HEX("#FFFFFF", colors[ImGuiCol_BorderShadow].w);
 
-    colors[ImGuiCol_FrameBg] = win9x_rgb(192, 192, 192, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = win9x_rgb(220, 220, 220, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = win9x_rgb(168, 168, 168, colors[ImGuiCol_FrameBgActive].w);
+    colors[ImGuiCol_FrameBg] = FROM_HEX("#FFFFFF", colors[ImGuiCol_FrameBg].w);
+    colors[ImGuiCol_FrameBgHovered] = FROM_HEX("#DCDCDC", colors[ImGuiCol_FrameBgHovered].w);
+    colors[ImGuiCol_FrameBgActive] = FROM_HEX("#A8A8A8", colors[ImGuiCol_FrameBgActive].w);
 
-    colors[ImGuiCol_TitleBg] = win9x_rgb(64, 64, 160, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = win9x_rgb(0, 0, 128, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_MenuBarBg] = win9x_rgb(192, 192, 192, colors[ImGuiCol_MenuBarBg].w);
+    colors[ImGuiCol_TitleBg] = FROM_HEX("#4040A0", colors[ImGuiCol_TitleBg].w);
+    colors[ImGuiCol_TitleBgActive] = FROM_HEX("#0A246A", colors[ImGuiCol_TitleBgActive].w);
+    colors[ImGuiCol_MenuBarBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_MenuBarBg].w);
 
-    colors[ImGuiCol_ScrollbarBg] = win9x_rgb(192, 192, 192, colors[ImGuiCol_ScrollbarBg].w);
-    colors[ImGuiCol_ScrollbarGrab] = win9x_rgb(174, 174, 174, colors[ImGuiCol_ScrollbarGrab].w);
-    colors[ImGuiCol_ScrollbarGrabHovered] = win9x_rgb(148, 148, 148, colors[ImGuiCol_ScrollbarGrabHovered].w);
-    colors[ImGuiCol_ScrollbarGrabActive] = win9x_rgb(115, 115, 115, colors[ImGuiCol_ScrollbarGrabActive].w);
+    colors[ImGuiCol_ScrollbarBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_ScrollbarBg].w);
+    colors[ImGuiCol_ScrollbarGrab] = FROM_HEX("#AEAEAE", colors[ImGuiCol_ScrollbarGrab].w);
+    colors[ImGuiCol_ScrollbarGrabHovered] = FROM_HEX("#949494", colors[ImGuiCol_ScrollbarGrabHovered].w);
+    colors[ImGuiCol_ScrollbarGrabActive] = FROM_HEX("#737373", colors[ImGuiCol_ScrollbarGrabActive].w);
 
-    colors[ImGuiCol_CheckMark] = win9x_rgb(0, 0, 0, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_SliderGrab] = win9x_rgb(160, 160, 160, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = win9x_rgb(115, 115, 115, colors[ImGuiCol_SliderGrabActive].w);
+    colors[ImGuiCol_CheckMark] = FROM_HEX("#000000", colors[ImGuiCol_CheckMark].w);
+    colors[ImGuiCol_SliderGrab] = FROM_HEX("#A0A0A0", colors[ImGuiCol_SliderGrab].w);
+    colors[ImGuiCol_SliderGrabActive] = FROM_HEX("#737373", colors[ImGuiCol_SliderGrabActive].w);
 
-    colors[ImGuiCol_Button] = win9x_rgb(192, 192, 192, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = win9x_rgb(220, 220, 220, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = win9x_rgb(168, 168, 168, colors[ImGuiCol_ButtonActive].w);
+    colors[ImGuiCol_Button] = FROM_HEX("#d4d0c8", colors[ImGuiCol_Button].w);
+    colors[ImGuiCol_ButtonHovered] = FROM_HEX("#DCDCDC", colors[ImGuiCol_ButtonHovered].w);
+    colors[ImGuiCol_ButtonActive] = FROM_HEX("#A8A8A8", colors[ImGuiCol_ButtonActive].w);
 
-    colors[ImGuiCol_Header] = win9x_rgb(198, 210, 234, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = win9x_rgb(172, 194, 230, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = win9x_rgb(142, 173, 223, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Separator] = win9x_rgb(96, 96, 96, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = win9x_rgb(160, 160, 160, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_ResizeGripHovered] = win9x_rgb(128, 128, 128, colors[ImGuiCol_ResizeGripHovered].w);
-    colors[ImGuiCol_ResizeGripActive] = win9x_rgb(90, 90, 90, colors[ImGuiCol_ResizeGripActive].w);
-    colors[ImGuiCol_Tab] = win9x_rgb(192, 192, 192, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabHovered] = win9x_rgb(220, 220, 220, colors[ImGuiCol_TabHovered].w);
-    colors[ImGuiCol_TabActive] = win9x_rgb(168, 168, 168, colors[ImGuiCol_TabActive].w);
+    // table rows are same as window background, with a dark separator line, so they look like they are sunken into the window.
+    colors[ImGuiCol_TableRowBg] = FROM_HEX("#FFFFFF", colors[ImGuiCol_TableRowBg].w);
+
+    colors[ImGuiCol_Header] = FROM_HEX("#C6D2EA", colors[ImGuiCol_Header].w);
+    colors[ImGuiCol_HeaderHovered] = FROM_HEX("#ACCAE6", colors[ImGuiCol_HeaderHovered].w);
+    colors[ImGuiCol_HeaderActive] = FROM_HEX("#8EADDF", colors[ImGuiCol_HeaderActive].w);
+    colors[ImGuiCol_Separator] = FROM_HEX("#606060", colors[ImGuiCol_Separator].w);
+    colors[ImGuiCol_ResizeGrip] = FROM_HEX("#A0A0A0", colors[ImGuiCol_ResizeGrip].w);
+    colors[ImGuiCol_ResizeGripHovered] = FROM_HEX("#808080", colors[ImGuiCol_ResizeGripHovered].w);
+    colors[ImGuiCol_ResizeGripActive] = FROM_HEX("#5A5A5A", colors[ImGuiCol_ResizeGripActive].w);
+    colors[ImGuiCol_Tab] = FROM_HEX("#d4d0c8", colors[ImGuiCol_Tab].w);
+    colors[ImGuiCol_TabHovered] = FROM_HEX("#DCDCDC", colors[ImGuiCol_TabHovered].w);
+    colors[ImGuiCol_TabActive] = FROM_HEX("#A8A8A8", colors[ImGuiCol_TabActive].w);
 
     style.WindowRounding = 0.0f;
     style.ChildRounding = 0.0f;
@@ -167,6 +232,13 @@ void apply_scheme_win9x()
     style.PopupBorderSize = 1.0f;
     style.TabBorderSize = 1.0f;
     style.FramePadding = ImVec2(5.0f, 3.0f);
+
+    style.ScrollbarSize = 20.0f;
+    style.GrabMinSize = 15.0f;
+    style.WindowBorderSize = 1.0f;
+
+    style.AntiAliasedFill = true;
+    style.AntiAliasedLines = true;
 }
 
 }
@@ -216,7 +288,7 @@ void ShellUi::reset_counter(ConsoleLog* log, vk::string_view message)
 void ShellUi::apply_style()
 {
     /* Default desktop clear used by non-Win9x themes. */
-    ImGui_ImplVK_SetClearColor(22, 22, 30);
+    ::ImGui_ImplVK_SetClearColor(22, 22, 30);
 
     switch (style_index_) {
     case 1:
@@ -236,8 +308,8 @@ void ShellUi::apply_style()
         break;
     case 6:
         apply_scheme_win9x();
-        /* #018281 desktop, pre-swizzled for current BGR vertex path. */
-        ImGui_ImplVK_SetClearColor(129, 130, 1);
+        /* Framebuffer clear color stays on the backend's RGB byte path. */
+        ImGui_ImplVK_SetClearColor("#3a6ea5");
         break;
     default:
         ImGui::StyleColorsDark();
