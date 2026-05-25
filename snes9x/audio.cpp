@@ -4,6 +4,8 @@ namespace snes9x_frontend {
 
 namespace {
 
+constexpr int kAudioChannel = 0;
+
 void audio_queue_push(AppState* app, const int16_t* samples, vk_u32 sample_count)
 {
     if (app == nullptr || samples == nullptr)
@@ -79,10 +81,13 @@ void audio_try_submit(AppState* app)
         if (!app->audio.play_block_pending && !audio_stage_play_block(app))
             return;
 
-        if (!VK_CALL(snd_play,
+        if (!VK_CALL(snd_mix_queue_play,
+                     kAudioChannel,
                      app->audio.play_block,
-                     app->audio.play_block_samples * static_cast<vk_u32>(sizeof(int16_t)),
-                     VK_SND_FORMAT_SIGNED_16_STEREO)) {
+                     app->audio.play_block_samples / 2u,
+                     VK_SND_FORMAT_SIGNED_16_STEREO,
+                     kOutputSampleRate,
+                     255, 255)) {
             return;
         }
 
@@ -96,7 +101,7 @@ void audio_reset(AppState* app)
     if (app == nullptr)
         return;
 
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     app->audio.queue_read = 0;
     app->audio.queue_write = 0;
     app->audio.queue_count = 0;
@@ -104,8 +109,6 @@ void audio_reset(AppState* app)
     app->audio.play_block_pending = false;
     app->audio.scratch.clear();
     S9xClearSamples();
-    VK_CALL(snd_set_sample_rate, kOutputSampleRate);
-    VK_CALL(snd_set_volume, 255, 255);
 }
 
 } // namespace snes9x_frontend

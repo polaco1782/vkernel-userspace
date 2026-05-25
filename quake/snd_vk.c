@@ -70,8 +70,6 @@ qboolean SNDDMA_Init(dma_t *dma)
         return false;
     }
 
-    VK_CALL(snd_set_volume, 255, 255);
-
     last_submit_tick     = 0;
     last_submit_frames   = 0;
     last_submit_samplepos = 0;
@@ -103,7 +101,6 @@ void SNDDMA_Shutdown(void)
 {
     if (!shm) return;
     VK_CALL(snd_mix_stop, STREAM_CHANNEL);
-    VK_CALL(snd_stop);
     if (shm->buffer) {
         free(shm->buffer);
         shm->buffer = NULL;
@@ -118,10 +115,6 @@ void SNDDMA_BlockSound(void)   {}
 void SNDDMA_Submit(void)
 {
     if (!shm || !shm->buffer) return;
-
-    /* Already playing? skip this frame */
-    if (VK_CALL(snd_mix_is_playing, STREAM_CHANNEL))
-        return;
 
     /* Submit ~100ms worth of frames per call */
     int chunk_frames = shm->speed / 10; /* 4410 frames */
@@ -144,17 +137,19 @@ void SNDDMA_Submit(void)
     if (chunk_frames == 0)
         chunk_frames = 1;
 
+    if (!VK_CALL(snd_mix_queue_play,
+                 STREAM_CHANNEL,
+                 shm->buffer + byte_pos,
+                 chunk_frames,
+                 VK_SND_FORMAT_SIGNED_16_STEREO,
+                 (vk_u32)shm->speed,
+                 255, 255)) {
+        return;
+    }
+
     last_submit_tick      = VK_CALL(tick_count);
     last_submit_frames    = chunk_frames;
     last_submit_samplepos = shm->samplepos;
-
-    VK_CALL(snd_mix_play,
-            STREAM_CHANNEL,
-            shm->buffer + byte_pos,
-            chunk_frames,
-            VK_SND_FORMAT_SIGNED_16_STEREO,
-            (vk_u32)shm->speed,
-            255, 255);
 
     shm->samplepos = (shm->samplepos
                       + chunk_frames * shm->channels) % shm->samples;

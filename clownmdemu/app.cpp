@@ -5,6 +5,10 @@
 
 namespace clownmdemu_frontend {
 
+namespace {
+constexpr int kAudioChannel = 0;
+}
+
 void log_message(void* user_data, const char* format, va_list arg);
 void callback_fm_audio(void* user_data, ClownMDEmu* clownmdemu, size_t total_frames,
                        void (*generate_fm_audio)(ClownMDEmu*, cc_s16l*, size_t));
@@ -392,7 +396,7 @@ void idle_until_next_work(AppState* app) {
      * sleep when there is at least one spare tick and a full queued block of
      * audio already waiting behind the active DMA submission. */
     if (ticks_until_frame > 1
-        && VK_CALL(snd_is_playing)
+        && VK_CALL(snd_mix_is_playing, kAudioChannel)
         && app->audio.queue_count >= kPlayBlockFrames) {
         VK_CALL(sleep, ticks_until_frame - 1);
         return;
@@ -484,7 +488,7 @@ void pump_input(AppState* app) {
 }
 
 void destroy_app(AppState* app) {
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     close_save_file(app);
 }
 

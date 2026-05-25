@@ -75,10 +75,6 @@ static boolean vk_snd_init(GameMission_t mission)
 {
     (void)mission;
 
-    /* Set master hardware volume to maximum; per-channel volume is
-     * controlled via the software mixer. */
-    VK_CALL(snd_set_volume, 255, 255);
-
     memset(channels, 0, sizeof(channels));
     return true;
 }
@@ -89,7 +85,6 @@ static void vk_snd_shutdown(void)
     for (int i = 0; i < MAX_CHANNELS; ++i)
         VK_CALL(snd_mix_stop, i);
     VK_CALL(snd_mix_stop, MUSIC_CHANNEL);
-    VK_CALL(snd_stop);
 }
 
 static int vk_snd_get_sfx_lump_num(sfxinfo_t *sfx)
@@ -103,9 +98,7 @@ static int vk_snd_get_sfx_lump_num(sfxinfo_t *sfx)
 
 static void vk_snd_update(void)
 {
-    /* Re-submit the mixed buffer if the hardware window has expired
-     * but mixer channels still have remaining data. */
-    VK_CALL(snd_mix_update);
+    /* The kernel sound task owns mixer progression. */
 }
 
 static void vk_snd_update_params(int channel, int vol, int sep)
@@ -228,15 +221,10 @@ static void vk_music_poll(void)
         return;
     }
 
-    if (VK_CALL(snd_mix_is_playing, MUSIC_CHANNEL))
-    {
-        return;
-    }
-
     frames = vk_music_slice_frames();
     OPL_VK_Render(music_buffer, frames);
-    VK_CALL(snd_mix_play, MUSIC_CHANNEL, music_buffer, frames,
-            VK_SND_FORMAT_SIGNED_16_STEREO, snd_samplerate, 255, 255);
+    (void)VK_CALL(snd_mix_queue_play, MUSIC_CHANNEL, music_buffer, frames,
+                  VK_SND_FORMAT_SIGNED_16_STEREO, snd_samplerate, 255, 255);
 }
 
 static const snddevice_t vk_sound_devices[] = {

@@ -6,6 +6,8 @@ namespace clownmdemu_frontend {
 
 namespace {
 
+constexpr int kAudioChannel = 0;
+
 int32_t clamp_i16_range(int32_t value) {
     if (value > 32767)
         return 32767;
@@ -138,10 +140,13 @@ void audio_try_submit(AppState* app) {
         if (!app->audio.play_block_pending && !audio_stage_play_block(app))
             return;
 
-        if (!VK_CALL(snd_play,
+        if (!VK_CALL(snd_mix_queue_play,
+                kAudioChannel,
                 app->audio.play_block,
-                app->audio.play_block_frames * 2u * static_cast<vk_u32>(sizeof(int16_t)),
-                VK_SND_FORMAT_SIGNED_16_STEREO)) {
+                app->audio.play_block_frames,
+                VK_SND_FORMAT_SIGNED_16_STEREO,
+                kOutputSampleRate,
+                255, 255)) {
             return;
         }
 
@@ -151,7 +156,7 @@ void audio_try_submit(AppState* app) {
 }
 
 void audio_reset(AppState* app) {
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     app->audio.fm.accumulator = 0;
     app->audio.fm.frame_cursor = 0;
     app->audio.fm.prev_left = 0;
@@ -169,8 +174,6 @@ void audio_reset(AppState* app) {
     app->audio.play_block_frames = 0;
     app->audio.play_block_pending = false;
     memset(app->audio.frame_mix, 0, sizeof(app->audio.frame_mix));
-    VK_CALL(snd_set_sample_rate, kOutputSampleRate);
-    VK_CALL(snd_set_volume, 255, 255);
 }
 
 void log_message(void* user_data, const char* format, va_list arg) {

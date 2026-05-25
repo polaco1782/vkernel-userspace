@@ -4,6 +4,8 @@
 
 namespace {
 
+constexpr int kAudioChannel = 0;
+
 inline auto clamp_sample(float value) -> float
 {
     if (value > 1.0f) {
@@ -39,9 +41,7 @@ void Sound::resetQueue()
 
 void Sound::start()
 {
-    VK_CALL(snd_stop);
-    VK_CALL(snd_set_sample_rate, SAMPLE_RATE);
-    VK_CALL(snd_set_volume, 255, 255);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     resetQueue();
     initialized = true;
 }
@@ -52,7 +52,7 @@ void Sound::stop()
         return;
     }
 
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     resetQueue();
 }
 
@@ -65,10 +65,13 @@ void Sound::submitPending()
             play_block[index * 2 + 1] = sample;
         }
 
-        if (!VK_CALL(snd_play,
+        if (!VK_CALL(snd_mix_queue_play,
+                     kAudioChannel,
                      play_block,
-                     PLAY_FRAMES * 2u * static_cast<u32>(sizeof(s16)),
-                     VK_SND_FORMAT_SIGNED_16_STEREO)) {
+                     PLAY_FRAMES,
+                     VK_SND_FORMAT_SIGNED_16_STEREO,
+                     SAMPLE_RATE,
+                     255, 255)) {
             return;
         }
 

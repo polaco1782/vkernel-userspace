@@ -12,6 +12,7 @@ namespace snes9x_frontend {
 namespace {
 
 AppState* g_app = nullptr;
+constexpr int kAudioChannel = 0;
 
 void blit_scaled_image(AppState* app,
                        const vk_u32* source_pixels,
@@ -277,7 +278,7 @@ void idle_until_next_work(AppState* app)
 
     const vk_u64 ticks_until_frame = app->timing.next_frame_tick - now;
     if (ticks_until_frame > 1
-        && VK_CALL(snd_is_playing)
+        && VK_CALL(snd_mix_is_playing, kAudioChannel)
         && app->audio.queue_count >= (kPlayBlockFrames * 2u)) {
         VK_CALL(sleep, ticks_until_frame - 1);
         return;
@@ -375,7 +376,7 @@ void destroy_app(AppState* app)
 
     autosave_if_needed();
     S9xSetSamplesAvailableCallback(nullptr, nullptr);
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     S9xGraphicsDeinit();
     S9xDeinitAPU();
     Memory.Deinit();
@@ -530,8 +531,6 @@ void S9xMessage(int type, int, const char* message)
 
 bool8 S9xOpenSoundDevice()
 {
-    VK_CALL(snd_set_sample_rate, snes9x_frontend::kOutputSampleRate);
-    VK_CALL(snd_set_volume, 255, 255);
     return TRUE;
 }
 

@@ -33,6 +33,7 @@ constexpr vk_u32 kUiPanelPadding = 18;
 constexpr vk_u32 kUiHeaderHeight = 76;
 constexpr vk_u32 kUiFooterHeight = 30;
 constexpr vk_u32 kUiRefreshTicks = 10;
+constexpr int kAudioChannel = 0;
 
 struct BrowserEntry {
     char name[kBrowserNameMax];
@@ -912,7 +913,7 @@ static void player_close_decoder(PlayerState* player) {
     if (player == nullptr)
         return;
 
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, kAudioChannel);
     player_reset_queue(player);
 
     if (player->decoder_open) {
@@ -1058,7 +1059,7 @@ static vk_u32 player_pop_frames(PlayerState* player, int16_t* output, vk_u32 req
 static void player_reconcile_current_block(PlayerState* player) {
     if (player == nullptr || !player->current_block_active)
         return;
-    if (VK_CALL(snd_is_playing))
+    if (VK_CALL(snd_mix_is_playing, kAudioChannel))
         return;
 
     player->completed_frames += player->current_block_frames;
@@ -1080,10 +1081,13 @@ static void player_try_submit(PlayerState* player) {
 
     player_update_vu_from_block(player, player->audio.play_block, frames);
 
-    if (!VK_CALL(snd_play,
+    if (!VK_CALL(snd_mix_queue_play,
+                 kAudioChannel,
                  player->audio.play_block,
-                 frames * 2u * static_cast<vk_u32>(sizeof(int16_t)),
-                 VK_SND_FORMAT_SIGNED_16_STEREO)) {
+                 frames,
+                 VK_SND_FORMAT_SIGNED_16_STEREO,
+                 static_cast<vk_u32>(player->sample_rate),
+                 255, 255)) {
         player->playback_failed = true;
         player_set_status(player, "FAILED TO START AUDIO");
         player->current_block_active = false;
@@ -1135,13 +1139,6 @@ static bool player_open_track(PlayerState* player, const char* path) {
         return false;
     }
 
-    if (!VK_CALL(snd_set_sample_rate, static_cast<vk_u32>(player->sample_rate))) {
-        player_set_status(player, "UNSUPPORTED SAMPLE RATE");
-        player_close_decoder(player);
-        return false;
-    }
-
-    VK_CALL(snd_set_volume, 255, 255);
     player_set_status(player, "PLAYING %s", path_basename(path));
     player_fill_queue(player, kQueuePrimeFrames);
     player_try_submit(player);

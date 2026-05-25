@@ -514,6 +514,10 @@ void WindowManager::draw_windows()
                 continue;
             }
 
+            /* The task can disappear from snapshots before the scheduler
+             * finishes taking it off-CPU. Wait for that handoff before we
+             * recycle the shared framebuffer back into vgui's heap. */
+            vk_wait_task(app.task_id);
             if (focused_app_ == index) {
                 focused_app_ = -1;
             }
@@ -667,13 +671,6 @@ void WindowManager::draw_windows()
             if (!app.close_requested) {
                 request_app_termination(app);
                 app.close_requested = true;
-            }
-
-            if (!app_task_running(app.task_id)) {
-                if (focused_app_ == index) {
-                    focused_app_ = -1;
-                }
-                release_app_slot(app);
             }
         }
     }

@@ -34,6 +34,7 @@ extern "C" {
 #define VIS_SPECTRUM_BINS     48
 #define VIS_SPECTRUM_SAMPLES  96
 #define VIS_PEAK_DECAY        2
+#define AUDIO_CHANNEL         0
 
 static int16_t render_buf[RENDER_SAMPLES * 2];
 static int16_t play_buf[PLAY_SAMPLES * 2];
@@ -1338,8 +1339,6 @@ static void play_live(MODFILE *mod, const char *filename, int sample_rate)
               << sample_rate << " Hz)\n";
     std::cout << "Press any key to stop.\n\n";
 
-    VK_CALL(snd_set_sample_rate, (vk_u32)sample_rate);
-    VK_CALL(snd_set_volume, 255, 255);
     queue_rd = queue_wr = queue_count = 0;
     vis_div_ctr = 0;
 
@@ -1349,9 +1348,11 @@ static void play_live(MODFILE *mod, const char *filename, int sample_rate)
     }
 
     if (queue_pop_play_block()) {
-        VK_CALL(snd_play, play_buf,
-                (vk_u32)(PLAY_SAMPLES * 2 * sizeof(int16_t)),
-                VK_SND_FORMAT_SIGNED_16);
+        (void)VK_CALL(snd_mix_queue_play, AUDIO_CHANNEL, play_buf,
+                      (vk_u32)PLAY_SAMPLES,
+                      VK_SND_FORMAT_SIGNED_16_STEREO,
+                      (vk_u32)sample_rate,
+                      255, 255);
     }
 
     for (;;) {
@@ -1360,10 +1361,12 @@ static void play_live(MODFILE *mod, const char *filename, int sample_rate)
         if (VK_CALL(poll_key, &key) && key.pressed)
             break;
 
-        if (!VK_CALL(snd_is_playing) && queue_pop_play_block()) {
-            VK_CALL(snd_play, play_buf,
-                    (vk_u32)(PLAY_SAMPLES * 2 * sizeof(int16_t)),
-                    VK_SND_FORMAT_SIGNED_16);
+        if (!VK_CALL(snd_mix_is_playing, AUDIO_CHANNEL) && queue_pop_play_block()) {
+            (void)VK_CALL(snd_mix_queue_play, AUDIO_CHANNEL, play_buf,
+                          (vk_u32)PLAY_SAMPLES,
+                          VK_SND_FORMAT_SIGNED_16_STEREO,
+                          (vk_u32)sample_rate,
+                          255, 255);
         }
 
         for (int i = 0; i < 2 && queue_count < QUEUE_TARGET_SAMPLES; ++i) {
@@ -1371,11 +1374,13 @@ static void play_live(MODFILE *mod, const char *filename, int sample_rate)
                 break;
         }
 
-        if (!VK_CALL(snd_is_playing) && queue_count >= PLAY_SAMPLES) {
+        if (!VK_CALL(snd_mix_is_playing, AUDIO_CHANNEL) && queue_count >= PLAY_SAMPLES) {
             if (queue_pop_play_block()) {
-                VK_CALL(snd_play, play_buf,
-                        (vk_u32)(PLAY_SAMPLES * 2 * sizeof(int16_t)),
-                        VK_SND_FORMAT_SIGNED_16);
+                (void)VK_CALL(snd_mix_queue_play, AUDIO_CHANNEL, play_buf,
+                              (vk_u32)PLAY_SAMPLES,
+                              VK_SND_FORMAT_SIGNED_16_STEREO,
+                              (vk_u32)sample_rate,
+                              255, 255);
             }
         }
 
@@ -1387,7 +1392,7 @@ static void play_live(MODFILE *mod, const char *filename, int sample_rate)
         VK_CALL(yield);
     }
 
-    VK_CALL(snd_stop);
+    VK_CALL(snd_mix_stop, AUDIO_CHANNEL);
     free(pixbuf);
     pixbuf = NULL;
     pixbuf_pixels = 0;
