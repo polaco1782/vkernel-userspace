@@ -1,6 +1,7 @@
 #include "window_manager.h"
 
 #include "console_log.h"
+#include "imgui/imgui_internal.h"
 
 #include <new>
 #include <stdio.h>
@@ -181,10 +182,16 @@ void WindowManager::release_app_slot(AppWindow& app)
     app.open = false;
     app.close_requested = false;
     app.focus_next = false;
+    app.minimized = false;
+    app.maximized = false;
+    app.restore_pending = false;
+    app.restore_bounds_valid = false;
     app.startup_size_handled = false;
     app.task_id = -1;
     app.width = 0;
     app.height = 0;
+    app.restore_pos = ImVec2(0.0f, 0.0f);
+    app.restore_size = ImVec2(0.0f, 0.0f);
     app.path.clear();
     app.title.clear();
 }
@@ -251,6 +258,30 @@ auto WindowManager::resize_app_framebuffer(AppWindow& app, vk_u32 width, vk_u32 
     app.width = width;
     app.height = height;
     return true;
+}
+
+void WindowManager::remember_restore_bounds(AppWindow& app, const ImVec2& position, const ImVec2& size)
+{
+    if (size.x <= 0.0f || size.y <= 0.0f) {
+        return;
+    }
+
+    app.restore_pos = position;
+    app.restore_size = size;
+    app.restore_bounds_valid = true;
+}
+
+void WindowManager::toggle_maximize(AppWindow& app, const ImVec2& position, const ImVec2& size)
+{
+    if (!app.maximized) {
+        remember_restore_bounds(app, position, size);
+        app.maximized = true;
+    } else {
+        app.maximized = false;
+        app.restore_pending = app.restore_bounds_valid;
+    }
+
+    app.focus_next = true;
 }
 
 auto WindowManager::launch_windowed_app(vk::string_view path, vk_u32 width, vk_u32 height) -> vk_i64
@@ -354,8 +385,114 @@ void WindowManager::shutdown()
     }
 }
 
+enum class TitleBarButtonIcon {
+    Minimize,
+    Maximize,
+    Restore,
+};
+
+static auto draw_title_bar_symbol_button(ImGuiWindow* window,
+                                         const ImRect& title_bar_rect,
+                                         const char* id_suffix,
+                                         const ImVec2& pos,
+                                         TitleBarButtonIcon icon) -> bool
+{
+    ImGuiContext& g = *GImGui;
+    const ImRect bb(pos, pos + ImVec2(g.FontSize, g.FontSize));
+
+    const ImGuiItemFlags item_flags_backup = g.CurrentItemFlags;
+    const ImGuiNavLayer nav_layer_backup = window->DC.NavLayerCurrent;
+    g.CurrentItemFlags |= ImGuiItemFlags_NoNavDefaultFocus;
+    window->DC.NavLayerCurrent = ImGuiNavLayer_Menu;
+
+    ImGui::PushClipRect(title_bar_rect.Min, title_bar_rect.Max, false);
+    const bool is_clipped = !ImGui::ItemAdd(bb, window->GetID(id_suffix));
+    bool hovered = false;
+    bool held = false;
+    const bool pressed = ImGui::ButtonBehavior(bb,
+                                               window->GetID(id_suffix),
+                                               &hovered,
+                                               &held,
+                                               ImGuiButtonFlags_NoNavFocus);
+    if (!is_clipped) {
+        if (hovered || held) {
+            const ImU32 bg_col = ImGui::GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered);
+            window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_col);
+        }
+
+        ImGui::RenderNavCursor(bb, window->GetID(id_suffix), ImGuiNavRenderCursorFlags_Compact);
+
+        const ImU32 line_col = imgui_title_should_use_light_text()
+            ? IM_COL32(255, 255, 255, 255)
+            : ImGui::GetColorU32(ImGuiCol_Text);
+        if (icon == TitleBarButtonIcon::Minimize) {
+            const float y = bb.Max.y - 3.0f;
+            window->DrawList->AddLine(ImVec2(bb.Min.x + 2.0f, y),
+                                      ImVec2(bb.Max.x - 2.0f, y),
+                                      line_col,
+                                      1.0f);
+        } else if (icon == TitleBarButtonIcon::Maximize) {
+            window->DrawList->AddRect(ImVec2(bb.Min.x + 2.0f, bb.Min.y + 2.0f),
+                                      ImVec2(bb.Max.x - 2.0f, bb.Max.y - 2.0f),
+                                      line_col);
+        } else {
+            const ImVec2 back_min(bb.Min.x + 2.0f, bb.Min.y + 4.0f);
+            const ImVec2 back_max(bb.Max.x - 3.0f, bb.Max.y - 1.0f);
+            const ImVec2 front_min(bb.Min.x + 4.0f, bb.Min.y + 2.0f);
+            const ImVec2 front_max(bb.Max.x - 1.0f, bb.Max.y - 3.0f);
+            window->DrawList->AddRect(back_min, back_max, line_col);
+            window->DrawList->AddRect(front_min, front_max, line_col);
+        }
+    }
+    ImGui::PopClipRect();
+
+    window->DC.NavLayerCurrent = nav_layer_backup;
+    g.CurrentItemFlags = item_flags_backup;
+    return pressed;
+}
+
+static void draw_title_bar_window_controls(bool maximized,
+                                           bool& minimize_requested,
+                                           bool& maximize_toggled)
+{
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    if (window == nullptr) {
+        return;
+    }
+
+    ImGuiContext& g = *GImGui;
+    ImGuiStyle& style = ImGui::GetStyle();
+    const ImRect title_bar_rect = window->TitleBarRect();
+    const float button_size = g.FontSize;
+    const float button_y = title_bar_rect.Min.y + style.FramePadding.y;
+    const float button_gap = style.ItemInnerSpacing.x;
+    const float close_slot_left =
+        title_bar_rect.Max.x - style.FramePadding.x - button_size - button_gap;
+    const float maximize_x = close_slot_left - button_size;
+    const float minimize_x = maximize_x - button_gap - button_size;
+
+    if (draw_title_bar_symbol_button(window,
+                                     title_bar_rect,
+                                     "##title_minimize",
+                                     ImVec2(minimize_x, button_y),
+                                     TitleBarButtonIcon::Minimize)) {
+        minimize_requested = true;
+    }
+
+    if (draw_title_bar_symbol_button(window,
+                                     title_bar_rect,
+                                     maximized ? "##title_restore" : "##title_maximize",
+                                     ImVec2(maximize_x, button_y),
+                                     maximized ? TitleBarButtonIcon::Restore : TitleBarButtonIcon::Maximize)) {
+        maximize_toggled = true;
+    }
+}
+
 void WindowManager::draw_windows()
 {
+    const ImVec2 display_size = ImGui::GetIO().DisplaySize;
+    const float workspace_top = ImGui::GetFrameHeight();
+
     for (int index = 0; index < k_max_apps; ++index) {
         AppWindow& app = apps_[index];
         if (!app.used) {
@@ -425,15 +562,57 @@ void WindowManager::draw_windows()
             ImVec2((app_accepts_resize ? static_cast<float>(k_min_app_width) : 1.0f) + k_window_chrome_width,
                    (app_accepts_resize ? static_cast<float>(k_min_app_height) : 1.0f) + k_window_chrome_height),
             ImVec2(FLT_MAX, FLT_MAX));
+        if (app.maximized) {
+            const float workspace_height =
+                display_size.y > workspace_top ? display_size.y - workspace_top : 1.0f;
+            ImGui::SetNextWindowPos(ImVec2(0.0f, workspace_top), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(display_size.x, workspace_height), ImGuiCond_Always);
+            ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
+        } else if (app.restore_pending && app.restore_bounds_valid) {
+            ImGui::SetNextWindowPos(app.restore_pos, ImGuiCond_Always);
+            ImGui::SetNextWindowSize(app.restore_size, ImGuiCond_Always);
+            app.restore_pending = false;
+        }
         if (app.focus_next) {
             ImGui::SetNextWindowFocus();
             app.focus_next = false;
         }
 
         const bool draw_contents = imgui_begin_window_readable_caption(app.title.c_str(), &app.open);
+        bool minimize_requested = false;
+        bool maximize_toggled = false;
+        if (draw_contents) {
+            draw_title_bar_window_controls(app.maximized, minimize_requested, maximize_toggled);
+        }
+
         if (draw_contents) {
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
                 focused_app_ = index;
+            }
+
+            if (!app.maximized && !ImGui::IsWindowCollapsed()) {
+                remember_restore_bounds(app, ImGui::GetWindowPos(), ImGui::GetWindowSize());
+            }
+
+            if (maximize_toggled) {
+                app.minimized = false;
+                toggle_maximize(app, ImGui::GetWindowPos(), ImGui::GetWindowSize());
+            }
+
+            if (minimize_requested) {
+                app.minimized = true;
+                if (!app.maximized) {
+                    remember_restore_bounds(app, ImGui::GetWindowPos(), ImGui::GetWindowSize());
+                }
+                ImGui::SetWindowCollapsed(true, ImGuiCond_Always);
+                if (focused_app_ == index) {
+                    focused_app_ = -1;
+                }
+            }
+
+            if (minimize_requested) {
+                ImGui::End();
+                continue;
             }
 
             const ImVec2 available = ImGui::GetContentRegionAvail();

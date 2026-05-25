@@ -52,10 +52,16 @@ private:
         bool open = false;
         bool close_requested = false;
         bool focus_next = false;
+        bool minimized = false;
+        bool maximized = false;
+        bool restore_pending = false;
+        bool restore_bounds_valid = false;
         bool startup_size_handled = false;
         vk_i64 task_id = -1;
         vk_u32 width = 0;
         vk_u32 height = 0;
+        ImVec2 restore_pos {};
+        ImVec2 restore_size {};
         FramebufferSurface pixels;
         FramebufferSurface snapshot;
         FramebufferSurface verify;
@@ -74,6 +80,8 @@ private:
     void release_app_slot(AppWindow& app);
     void capture_app_snapshot(AppWindow& app);
     [[nodiscard]] auto resize_app_framebuffer(AppWindow& app, vk_u32 width, vk_u32 height) -> bool;
+    void remember_restore_bounds(AppWindow& app, const ImVec2& position, const ImVec2& size);
+    void toggle_maximize(AppWindow& app, const ImVec2& position, const ImVec2& size);
 
     ConsoleLog& log_;
     std::array<AppWindow, k_max_apps> apps_ {};
