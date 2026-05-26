@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{7C8D9E0F-1234-4B5C-89DE-0123456789AC}</ProjectGuid>
+    <RootNamespace>libc</RootNamespace>
+    <ProjectName>libc</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(ProjectDir)..\llvm_userspace.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)..\..\build_clang\libc\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\..\build_clang\libc\obj\$(Configuration)\</IntDir>
+    <TargetName>vklibc</TargetName>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ClangClAdditionalOptions>$(ClangClAdditionalOptions) /clang:-std=c17 /clang:-fms-extensions /clang:-Wno-unused-parameter /clang:-Wno-unused-function /clang:-Wno-missing-field-initializers /clang:-Wno-pointer-to-int-cast /clang:-Wno-deprecated-non-prototype /clang:-Wno-sign-compare</ClangClAdditionalOptions>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <CompileAs>CompileAsC</CompileAs>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\newlib\newlib\libc\include;$(ProjectDir)..\newlib\newlib\libm\common;$(ProjectDir)..\newlib\newlib\libm\mathfp;$(ProjectDir)..\include;$(ProjectDir)..\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VK_BUILD_FOR_USERSPACE=1;_LIBC;__STD_C=1;__SINGLE_THREAD__;HAVE_FCNTL=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="fltused.c" />
+    <ClCompile Include="syscalls.c" />
+    <ClCompile Include="..\newlib\newlib\libc\locale\locale.c" />
+    <ClCompile Include="..\newlib\newlib\libc\locale\localeconv.c" />
+    <ClCompile Include="..\newlib\newlib\libc\errno\errno.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\closer.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\fstatr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\gettimeofdayr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\impure.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\isattyr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\lseekr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\openr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\readr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\reent.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\sbrkr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\signalr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\timesr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\reent\writer.c" />
+    <ClCompile Include="..\newlib\newlib\libc\posix\execve.c" />
+    <ClCompile Include="..\newlib\newlib\libc\ctype\ctype_.c" />
+    <ClCompile Include="..\newlib\newlib\libc\ctype\toupper.c" />
+    <ClCompile Include="..\newlib\newlib\libc\signal\signal.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fflush.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fclose.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fiprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fread.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fopen.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\findfp.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\flags.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fseek.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fseeko.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\ftell.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\ftello.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fvwrite.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\fwalk.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\makebuf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-svfscanf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-vfscanf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-vfscanf_float.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-vfscanf_i.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-svfprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-vfprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-vfprintf_float.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\nano-vfprintf_i.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\printf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\refill.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\sccl.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\siprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\siscanf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\sprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\sscanf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\snprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\stdio.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\ungetc.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\vsnprintf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\wbuf.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdio\wsetup.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\_Exit.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\__atexit.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\__call_atexit.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\abort.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\abs.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\aligned_alloc.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\assert.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\atexit.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\atof.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\calloc.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\callocr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\cxa_atexit.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\cxa_finalize.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\div.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\dtoa.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\dtoastub.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\environ.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\envlock.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\exit.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\gdtoa-gethex.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\gdtoa-hexnan.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\getenv.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\getenv_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\freer.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\malignr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\malloc.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\mallocr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\mbtowc_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\mlock.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\mprec.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\on_exit_args.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\realloc.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\reallocr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\strtod.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\strtol.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\strtoul.c" />
+    <ClCompile Include="..\newlib\newlib\libc\stdlib\wctomb_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\search\qsort.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\memchr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\memcmp.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\memcpy.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\memmove.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\memset.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strchr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strcmp.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strcpy.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strlen.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strncmp.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strnlen.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strncpy.c" />
+    <ClCompile Include="..\newlib\newlib\libc\string\strstr.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\asctime.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\asctime_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\clock.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\ctime.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\ctime_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\difftime.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\gettzinfo.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\gmtime.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\gmtime_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\lcltime.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\lcltime_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\mktime.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\month_lengths.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\time.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\tzcalc_limits.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\tzlock.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\tzset.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\tzset_r.c" />
+    <ClCompile Include="..\newlib\newlib\libc\time\tzvars.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_fmin.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_fpclassify.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_isnan.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_log1p.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_log2.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_nan.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_signbit.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_modf.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_cbrt.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\s_round.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\sf_fmin.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\sf_fpclassify.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\sf_isnan.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\sf_modf.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\sf_nan.c" />
+    <ClCompile Include="..\newlib\newlib\libm\common\math_err.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_exp.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_fabs.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_frexp.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_asinh.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_atan2.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_atangent.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_ceil.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_cos.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_floor.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_ispos.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_ldexp.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_log.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_log10.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_logarithm.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_mathcnst.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_numtest.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_pow.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_sin.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_sine.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_sinh.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_sineh.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\s_sqrt.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_cos.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_acos.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_atan2.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_atangent.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_asine.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_ceil.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_exp.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_fabs.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_floor.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_fmod.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_frexp.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_ispos.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_ldexp.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_log.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_logarithm.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_numtest.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_pow.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_sin.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_sine.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_sqrt.c" />
+    <ClCompile Include="..\newlib\newlib\libm\mathfp\sf_tan.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="float.h" />
+    <ClInclude Include="libc_compiler.h" />
+    <ClInclude Include="newlib_msvc_compat.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

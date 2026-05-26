@@ -10,21 +10,25 @@
  */
 
 /*
- * For the x86_64-elf target newlib maps the underscore syscall names
- * (e.g. _close) to their non-underscore equivalents (close) via the
- * MISSING_SYSCALL_NAMES macro in <_syslist.h>.  Define it here so that
- * our own function definitions are renamed in the same way and the
- * linker finds them.
+ * The ELF/newlib build expects the non-underscore syscall spellings
+ * (close, open, read, ...) while the MSVC/COFF build links the native
+ * underscore entry points (_close, _open, _read, ...).  Keep the
+ * historical remap for the GNU path only.
  */
+#if !defined(_MSC_VER)
 #define MISSING_SYSCALL_NAMES
+#endif
 #include <_syslist.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <errno.h>
+#include <string.h>
 #include <reent.h>
 
 #include "../include/vk.h"
+#include "libc_compiler.h"
 
 /* ============================================================
  * File-descriptor table
@@ -46,9 +50,9 @@ typedef struct {
 } vk_fd_entry_t;
 
 static vk_fd_entry_t _fd_table[VK_MAX_FDS] = {
-    [VK_FD_STDIN]  = { 0, 1 },
-    [VK_FD_STDOUT] = { 0, 1 },
-    [VK_FD_STDERR] = { 0, 1 },
+    { 0, 1 },
+    { 0, 1 },
+    { 0, 1 },
 };
 
 static int _fd_alloc(vk_file_handle_t h)
@@ -152,10 +156,21 @@ void* _sbrk(ptrdiff_t incr)
  * Process control
  * ============================================================ */
 
-void _exit(int code)
+VK_NORETURN void _exit(int code)
 {
     VK_CALL(exit, code);
-    __builtin_unreachable();
+    VK_UNREACHABLE();
+}
+
+long sysconf(int name)
+{
+    switch (name) {
+    case _SC_PAGESIZE:
+        return 4096;
+    default:
+        errno = EINVAL;
+        return -1;
+    }
 }
 
 int _kill(int pid, int sig)
@@ -230,19 +245,21 @@ int _close(int fd)
     return rc;
 }
 
-int _read(int fd, char* buf, int len)
+_READ_WRITE_RETURN_TYPE _read(int fd, void* buf, size_t len)
 {
-    if (len <= 0) return 0;
+    char* char_buf = (char*)buf;
+
+    if (len == 0) return 0;
 
     /* stdin — character-at-a-time from console */
     if (fd == VK_FD_STDIN) {
-        for (int i = 0; i < len; ++i) {
+        for (size_t i = 0; i < len; ++i) {
             char c = VK_CALL(getc);
-            buf[i] = c;
+            char_buf[i] = c;
             if (c == '\n' || c == '\r')
-                return i + 1;
+                return (_READ_WRITE_RETURN_TYPE)(i + 1);
         }
-        return len;
+        return (_READ_WRITE_RETURN_TYPE)len;
     }
 
     if (!_fd_valid(fd)) {
@@ -250,24 +267,26 @@ int _read(int fd, char* buf, int len)
         return -1;
     }
 
-    vk_usize n = VK_CALL(file_read_handle, _fd_table[fd].handle, buf, (vk_usize)len);
-    return (int)n;
+    vk_usize n = VK_CALL(file_read_handle, _fd_table[fd].handle, char_buf, (vk_usize)len);
+    return (_READ_WRITE_RETURN_TYPE)n;
 }
 
-int _write(int fd, const char* buf, int len)
+_READ_WRITE_RETURN_TYPE _write(int fd, const void* buf, size_t len)
 {
-    if (len <= 0) return 0;
+    const char* char_buf = (const char*)buf;
+
+    if (len == 0) return 0;
 
     /* stdout / stderr → console */
     if (fd == VK_FD_STDOUT || fd == VK_FD_STDERR) {
         if (vk_get_api()->vk_stdio_write) {
-            return (int)vk_get_api()->vk_stdio_write(buf, (vk_usize)len);
+            return (_READ_WRITE_RETURN_TYPE)vk_get_api()->vk_stdio_write(char_buf, (vk_usize)len);
         }
 
-        for (int i = 0; i < len; ++i) {
-            VK_CALL(putc, buf[i]);
+        for (size_t i = 0; i < len; ++i) {
+            VK_CALL(putc, char_buf[i]);
         }
-        return len;
+        return (_READ_WRITE_RETURN_TYPE)len;
     }
 
     if (!_fd_valid(fd)) {
@@ -275,11 +294,11 @@ int _write(int fd, const char* buf, int len)
         return -1;
     }
 
-    vk_usize n = VK_CALL(file_write_handle, _fd_table[fd].handle, buf, (vk_usize)len);
-    return (int)n;
+    vk_usize n = VK_CALL(file_write_handle, _fd_table[fd].handle, char_buf, (vk_usize)len);
+    return (_READ_WRITE_RETURN_TYPE)n;
 }
 
-int _lseek(int fd, int offset, int whence)
+_off_t _lseek(int fd, _off_t offset, int whence)
 {
     if (fd <= VK_FD_STDERR) {
         errno = ESPIPE;
@@ -298,7 +317,7 @@ int _lseek(int fd, int offset, int whence)
     }
 
     vk_i64 pos = VK_CALL(file_tell, _fd_table[fd].handle);
-    return (int)pos;
+    return (_off_t)pos;
 }
 
 int _fstat(int fd, struct stat* st)
@@ -308,7 +327,7 @@ int _fstat(int fd, struct stat* st)
         return -1;
     }
 
-    *st = (struct stat){0};
+    memset(st, 0, sizeof(*st));
 
     if (fd <= VK_FD_STDERR) {
         st->st_mode = S_IFCHR;
@@ -332,7 +351,7 @@ int _stat(const char* path, struct stat* st)
         return -1;
     }
 
-    *st = (struct stat){0};
+    memset(st, 0, sizeof(*st));
 
     if (VK_CALL(file_exists, path)) {
         st->st_mode = S_IFREG;

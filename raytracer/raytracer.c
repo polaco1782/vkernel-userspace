@@ -30,10 +30,6 @@ static inline float degrees_to_radians(float deg) {
     return deg * 3.14159265358979323846f / 180.0f;
 }
 
-#ifdef _MSC_VER
-int _fltused = 0;
-#endif
-
 /* ================================================================== */
 /* Configuration                                                       */
 /* ================================================================== */
@@ -703,7 +699,7 @@ static void build_scene(void){
 /* Entry point                                                         */
 /* ================================================================== */
 
-int main(char **argv, int argc){
+int main(int argc, char **argv){
     (void)argv; (void)argc;
 
     vk_framebuffer_info_t fb = {0};

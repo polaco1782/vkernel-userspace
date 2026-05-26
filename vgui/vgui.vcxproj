@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{B234C5D6-E7F8-4901-ABCD-23456789ABCD}</ProjectGuid>
+    <RootNamespace>vgui</RootNamespace>
+    <ProjectName>vgui</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(ProjectDir)..\llvm_userspace.props" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)..\..\build_clang\vgui\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\..\build_clang\vgui\obj\$(Configuration)\</IntDir>
+    <TargetName>vgui</TargetName>
+    <TargetExt>.vbin</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ClangClAdditionalOptions>$(ClangClAdditionalOptions) /clang:-fno-exceptions /clang:-fno-rtti /clang:-nostdinc++ /clang:-Wno-unused-parameter /clang:-Wno-missing-field-initializers /clang:-Wno-sign-compare /clang:-Wno-type-limits /clang:-Wno-unused-function /clang:-Wno-unknown-attributes</ClangClAdditionalOptions>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <CompileAs>Default</CompileAs>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libc;$(ProjectDir)..\newlib\newlib\libc\include;$(ProjectDir)..\include;$(ProjectDir)..\cpp\include;$(ProjectDir)..\..\include;$(ProjectDir)imgui;$(ProjectDir)implot;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>VK_BUILD_FOR_USERSPACE=1;IMGUI_USER_CONFIG=&quot;imgui_config.h&quot;;IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS;IMGUI_DISABLE_FILE_FUNCTIONS;IMGUI_DISABLE_WIN32_DEFAULT_CLIPBOARD_FUNCTIONS;IMGUI_DISABLE_WIN32_DEFAULT_IME_FUNCTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ExceptionHandling>false</ExceptionHandling>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <AdditionalOptions>/GR- /EHs-c- /Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\libc\crt0.c">
+      <CompileAs>CompileAsC</CompileAs>
+      <ClangClAdditionalOptions>$(ClangClAdditionalOptions) /clang:-std=c17</ClangClAdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="..\cpp\runtime\cxx_runtime.cpp">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\cpp\runtime\iostream.cpp">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="console_log.cpp" />
+    <ClCompile Include="imgui_impl_vk.cpp" />
+    <ClCompile Include="kobj_panel.cpp" />
+    <ClCompile Include="launch_registry.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="shell_ui.cpp" />
+    <ClCompile Include="task_manager_panel.cpp" />
+    <ClCompile Include="vkfm_panel.cpp" />
+    <ClCompile Include="window_manager.cpp" />
+    <ClCompile Include="imgui\imgui.cpp" />
+    <ClCompile Include="imgui\imgui_demo.cpp" />
+    <ClCompile Include="imgui\imgui_draw.cpp" />
+    <ClCompile Include="imgui\imgui_tables.cpp" />
+    <ClCompile Include="imgui\imgui_widgets.cpp" />
+    <ClCompile Include="implot\implot.cpp" />
+    <ClCompile Include="implot\implot_items.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="console_log.h" />
+    <ClInclude Include="imgui_config.h" />
+    <ClInclude Include="imgui_impl_vk.h" />
+    <ClInclude Include="kobj_panel.h" />
+    <ClInclude Include="launch_registry.h" />
+    <ClInclude Include="shell_ui.h" />
+    <ClInclude Include="task_manager_panel.h" />
+    <ClInclude Include="vgui_common.h" />
+    <ClInclude Include="vkfm_panel.h" />
+    <ClInclude Include="window_manager.h" />
+    <ClInclude Include="imgui\imgui.h" />
+    <ClInclude Include="imgui\imgui_internal.h" />
+    <ClInclude Include="imgui\imconfig.h" />
+    <ClInclude Include="implot\implot.h" />
+    <ClInclude Include="implot\implot_internal.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\libc\libc.vcxproj">
+      <Project>{7C8D9E0F-1234-4B5C-89DE-0123456789AC}</Project>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+      <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

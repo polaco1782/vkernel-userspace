@@ -3,34 +3,41 @@
 *.d
 *.dll
 *.exe
+*.exp
+*.idb
+*.iobj
+*.ilk
+*.ipdb
 *.lib
 *.o
 *.obj
+*.pdb
 *.vbin
 
-# Generated runtime state
-newlib/
-newlib-build/
+# IDE and per-project build state
+*.vcxproj.user
+.vs/
+*/.build/
+*/build_vs/
 sysroot/
 
+# Generated toolchain sources
+newlib/
+
 # Program-specific generated files
-cpp/libvkcpp.a
-cpp/runtime/*.o
 doom/obj/
-libc/*.a
-libc/*.o
 quake/obj/
 quake-src/src/memory/
 vgui/imgui/
 vgui/implot/
 vnes/build/
-shell/.build/
 
-# Local content that should not be committed
+# Shareware doom wad files (not redistributable, must be provided by user)
+doom1.wad
+doom2.wad
+doom.wad
+pak0.pak
 clownmdemu/roms/
-doom/doom1.wad
-doom/doom2.wad
 minimp3/tracks/
-quake/pak0.pak
 vnes/roms/
 snes9x/roms/

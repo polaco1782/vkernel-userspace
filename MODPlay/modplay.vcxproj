@@ -30,77 +30,68 @@
   -->
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v145</PlatformToolset>
-    <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
-    <UseDebugLibraries>true</UseDebugLibraries>
-    <LinkIncremental>false</LinkIncremental>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <WholeProgramOptimization>false</WholeProgramOptimization>
-    <LinkIncremental>false</LinkIncremental>
-  </PropertyGroup>
+  <Import Project="$(ProjectDir)..\llvm_userspace.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
-    <OutDir>$(SolutionDir)build_vs\modplay\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)build_vs\modplay\obj\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)..\..\build_clang\modplay\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\..\build_clang\modplay\obj\$(Configuration)\</IntDir>
     <TargetName>modplay</TargetName>
     <TargetExt>.vbin</TargetExt>
   </PropertyGroup>
-  <PropertyGroup Label="Vcpkg">
-    <VcpkgEnabled>false</VcpkgEnabled>
+  <PropertyGroup>
+    <ClangClAdditionalOptions>$(ClangClAdditionalOptions) /clang:-fno-exceptions /clang:-fno-rtti /clang:-nostdinc++</ClangClAdditionalOptions>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
-      <SDLCheck>false</SDLCheck>
       <CompileAs>Default</CompileAs>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\libc;$(ProjectDir)..\newlib\newlib\libc\include;$(ProjectDir)..\include;$(ProjectDir)..\cpp\include;$(ProjectDir)..\..\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>VK_BUILD_FOR_USERSPACE=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <BufferSecurityCheck>false</BufferSecurityCheck>
       <ExceptionHandling>false</ExceptionHandling>
       <RuntimeTypeInfo>false</RuntimeTypeInfo>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
-      <!-- /GS- no security cookie  /Gs999999 no stack probes (__chkstk) -->
-      <AdditionalOptions>/GS- /Gs999999 /GR- /EHs-c- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <Link>
-      <!-- /NODEFAULTLIB no CRT  /DYNAMICBASE generates .reloc for PE loader -->
-      <SubSystem>Console</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
-      <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <EntryPointSymbol>_start</EntryPointSymbol>
-      <RandomizedBaseAddress>true</RandomizedBaseAddress>
-      <DataExecutionPrevention>false</DataExecutionPrevention>
-      <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
-    <ClCompile>
-      <Optimization>Disabled</Optimization>
-      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
-      <PreprocessorDefinitions>DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <DebugInformationFormat Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ProgramDatabase</DebugInformationFormat>
-    </ClCompile>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
-    <ClCompile>
-      <Optimization>MaxSpeed</Optimization>
-      <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/GR- /EHs-c- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\libc\crt0.c">
+      <CompileAs>CompileAsC</CompileAs>
+    </ClCompile>
     <ClCompile Include="main_vk.cpp">
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
-    <ClCompile Include="modplay.c" />
+    <ClCompile Include="..\cpp\runtime\cxx_runtime.cpp">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="..\cpp\runtime\iostream.cpp">
+      <CompileAs>CompileAsCpp</CompileAs>
+    </ClCompile>
+    <ClCompile Include="libmodplay\effects.c" />
+    <ClCompile Include="libmodplay\envelope.c" />
+    <ClCompile Include="libmodplay\mixer.c" />
+    <ClCompile Include="libmodplay\mod.c" />
+    <ClCompile Include="libmodplay\modplay.c" />
+    <ClCompile Include="libmodplay\modplay_core.c" />
+    <ClCompile Include="libmodplay\s3m.c" />
+    <ClCompile Include="libmodplay\xm.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="modplay.h" />
+    <ClInclude Include="libmodplay\defines.h" />
+    <ClInclude Include="libmodplay\effects.h" />
+    <ClInclude Include="libmodplay\envelope.h" />
+    <ClInclude Include="libmodplay\mixer.h" />
+    <ClInclude Include="libmodplay\mod.h" />
+    <ClInclude Include="libmodplay\modplay.h" />
+    <ClInclude Include="libmodplay\modplay_core.h" />
+    <ClInclude Include="libmodplay\s3m.h" />
+    <ClInclude Include="libmodplay\xm.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\libc\libc.vcxproj">
+      <Project>{7C8D9E0F-1234-4B5C-89DE-0123456789AC}</Project>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+      <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

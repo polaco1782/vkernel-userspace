@@ -11,6 +11,8 @@
 
 #include "../include/vk.h"
 
+#include "libc_compiler.h"
+
 /* Provided by the user program */
 extern int main(int argc, char** argv);
 
@@ -27,12 +29,41 @@ extern int main(int argc, char** argv);
 
 typedef void (*_func_ptr)(void);
 
+#if defined(_MSC_VER)
+
+/*
+ * MSVC stores startup hooks in .CRT$XI* (C initializers) and .CRT$XC*
+ * (C++ initializers). We provide our own sentinels because vkernel
+ * userspace binaries do not link the hosted CRT.
+ */
+#pragma section(".CRT$XIA", long, read)
+#pragma section(".CRT$XIZ", long, read)
+#pragma section(".CRT$XCA", long, read)
+#pragma section(".CRT$XCZ", long, read)
+#pragma section(".CRT$XPA", long, read)
+#pragma section(".CRT$XPZ", long, read)
+#pragma section(".CRT$XTA", long, read)
+#pragma section(".CRT$XTZ", long, read)
+
+__declspec(allocate(".CRT$XIA")) _func_ptr __xi_a[] = { 0 };
+__declspec(allocate(".CRT$XIZ")) _func_ptr __xi_z[] = { 0 };
+__declspec(allocate(".CRT$XCA")) _func_ptr __xc_a[] = { 0 };
+__declspec(allocate(".CRT$XCZ")) _func_ptr __xc_z[] = { 0 };
+__declspec(allocate(".CRT$XPA")) _func_ptr __xp_a[] = { 0 };
+__declspec(allocate(".CRT$XPZ")) _func_ptr __xp_z[] = { 0 };
+__declspec(allocate(".CRT$XTA")) _func_ptr __xt_a[] = { 0 };
+__declspec(allocate(".CRT$XTZ")) _func_ptr __xt_z[] = { 0 };
+
+#else
+
 extern _func_ptr __preinit_array_start[] __attribute__((weak));
 extern _func_ptr __preinit_array_end[]   __attribute__((weak));
 extern _func_ptr __init_array_start[]    __attribute__((weak));
 extern _func_ptr __init_array_end[]      __attribute__((weak));
 extern _func_ptr __fini_array_start[]    __attribute__((weak));
 extern _func_ptr __fini_array_end[]      __attribute__((weak));
+
+#endif
 
 #define VK_CMDLINE_MAX 256
 #define VK_ARGV_MAX    32
@@ -103,22 +134,47 @@ static int parse_argv(char* cmdline, char** argv, int max_args)
 
 void __libc_init_array(void)
 {
-    if (__preinit_array_start) {
+#if defined(_MSC_VER)
+    for (_func_ptr *f = __xi_a + 1; f < __xi_z; ++f) {
+        if (*f != (_func_ptr)0)
+            (*f)();
+    }
+    for (_func_ptr *f = __xc_a + 1; f < __xc_z; ++f) {
+        if (*f != (_func_ptr)0)
+            (*f)();
+    }
+#else
+    if (__preinit_array_start && __preinit_array_end
+            && __preinit_array_end > __preinit_array_start) {
         for (_func_ptr *f = __preinit_array_start; f < __preinit_array_end; ++f)
             (*f)();
     }
-    if (__init_array_start) {
+    if (__init_array_start && __init_array_end
+            && __init_array_end > __init_array_start) {
         for (_func_ptr *f = __init_array_start; f < __init_array_end; ++f)
             (*f)();
     }
+#endif
 }
 
 void __libc_fini_array(void)
 {
-    if (__fini_array_start) {
+#if defined(_MSC_VER)
+    for (_func_ptr *f = __xp_a + 1; f < __xp_z; ++f) {
+        if (*f != (_func_ptr)0)
+            (*f)();
+    }
+    for (_func_ptr *f = __xt_a + 1; f < __xt_z; ++f) {
+        if (*f != (_func_ptr)0)
+            (*f)();
+    }
+#else
+    if (__fini_array_start && __fini_array_end
+            && __fini_array_end > __fini_array_start) {
         for (_func_ptr *f = __fini_array_end - 1; f >= __fini_array_start; --f)
             (*f)();
     }
+#endif
 }
 
 /*

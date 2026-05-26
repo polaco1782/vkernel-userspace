@@ -165,10 +165,10 @@ Index of this file:
 #endif
 
 // Helpers
-#if defined(_MSC_VER) && !defined(snprintf)
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(snprintf)
 #define snprintf    _snprintf
 #endif
-#if defined(_MSC_VER) && !defined(vsnprintf)
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(vsnprintf)
 #define vsnprintf   _vsnprintf
 #endif
 

@@ -2082,7 +2082,7 @@ const char* ImStrSkipBlank(const char* str)
 #endif
 #endif // #ifdef IMGUI_USE_STB_SPRINTF
 
-#if defined(_MSC_VER) && !defined(vsnprintf)
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(vsnprintf)
 #define vsnprintf _vsnprintf
 #endif
 

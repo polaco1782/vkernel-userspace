@@ -950,7 +950,7 @@ inline int GetTimeStep(int max_divs, ImPlotTimeUnit unit) {
     return 0;
 }
 
-#ifndef _WIN32
+#if !defined(_WIN32) || defined(__clang__)
 namespace {
 
 auto days_from_civil(long long year, unsigned month, unsigned day) -> long long
@@ -982,7 +982,7 @@ auto portable_timegm(const tm* ptm) -> time_t
 
 ImPlotTime MkGmtTime(struct tm *ptm) {
     ImPlotTime t;
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__clang__)
     t.S = _mkgmtime(ptm);
 #else
     t.S = portable_timegm(ptm);
@@ -994,7 +994,7 @@ ImPlotTime MkGmtTime(struct tm *ptm) {
 
 tm* GetGmtTime(const ImPlotTime& t, tm* ptm)
 {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__clang__)
   if (gmtime_s(ptm, &t.S) == 0)
     return ptm;
   else
@@ -1013,7 +1013,7 @@ ImPlotTime MkLocTime(struct tm *ptm) {
 }
 
 tm* GetLocTime(const ImPlotTime& t, tm* ptm) {
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(__clang__)
   if (localtime_s(ptm, &t.S) == 0)
     return ptm;
   else
