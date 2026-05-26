@@ -213,7 +213,7 @@ void runtime_free(void* ptr) noexcept
 #if defined(_MSC_VER)
 extern "C" void* __dso_handle = nullptr;
 
-extern "C" int atexit(void (__cdecl*)(void))
+__attribute__((weak)) extern "C" int atexit(void (__cdecl*)(void))
 {
     return 0;
 }
@@ -221,12 +221,12 @@ extern "C" int atexit(void (__cdecl*)(void))
 void* __dso_handle __attribute__((weak, visibility("hidden"))) = nullptr;
 #endif
 
-extern "C" int __cxa_atexit(void (*)(void*), void*, void*) noexcept
+__attribute__((weak)) extern "C" int __cxa_atexit(void (*)(void*), void*, void*) noexcept
 {
     return 0;
 }
 
-extern "C" void __cxa_finalize(void*) noexcept
+__attribute__((weak)) extern "C" void __cxa_finalize(void*) noexcept
 {
 }
 
