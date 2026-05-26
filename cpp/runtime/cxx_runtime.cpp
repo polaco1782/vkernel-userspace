@@ -3,6 +3,10 @@
 
 #include "../../include/vk.h"
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
 namespace {
 
 constexpr std::size_t kAllocAlignment = 16;
@@ -44,7 +48,13 @@ constexpr auto free_block_size() noexcept -> std::size_t
         api->vk_exit(1);
     }
 
+#if defined(_MSC_VER)
+    __debugbreak();
+    for (;;) {
+    }
+#else
     __builtin_trap();
+#endif
 }
 
 auto runtime_kernel_alloc(std::size_t size) noexcept -> void*
@@ -200,7 +210,16 @@ void runtime_free(void* ptr) noexcept
 
 }  // namespace
 
+#if defined(_MSC_VER)
+extern "C" void* __dso_handle = nullptr;
+
+extern "C" int atexit(void (__cdecl*)(void))
+{
+    return 0;
+}
+#else
 void* __dso_handle __attribute__((weak, visibility("hidden"))) = nullptr;
+#endif
 
 extern "C" int __cxa_atexit(void (*)(void*), void*, void*) noexcept
 {

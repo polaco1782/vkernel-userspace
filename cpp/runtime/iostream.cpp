@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdint.h>
 
 #include "../../include/vk.h"
 
@@ -78,7 +79,7 @@ auto write_pointer(std::ostream& stream, const void* value) -> std::ostream&
     static constexpr char kHexDigits[] = "0123456789abcdef";
 
     const unsigned long long raw =
-        static_cast<unsigned long long>(reinterpret_cast<unsigned long>(value));
+        static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(value));
 
     char digits[2 + (sizeof(unsigned long long) * 2)];
     std::size_t length = 0;

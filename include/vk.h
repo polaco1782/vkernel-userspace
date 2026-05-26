@@ -83,8 +83,11 @@ static inline int vk_kobj_query(const char* path,
         return vk_get_api()->vk_kobj_query(path, out_value, out_value_cap, out_info);
     if (out_value && out_value_cap > 0)
         out_value[0] = '\0';
-    if (out_info)
-        __builtin_memset(out_info, 0, sizeof(*out_info));
+    if (out_info) {
+        unsigned char* bytes = (unsigned char*)out_info;
+        for (vk_usize i = 0; i < sizeof(*out_info); ++i)
+            bytes[i] = 0;
+    }
     return 0;
 }
 

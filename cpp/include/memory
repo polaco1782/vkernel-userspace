@@ -10,7 +10,12 @@ namespace std {
 template <typename T>
 constexpr T* addressof(T& value) noexcept
 {
+#if defined(_MSC_VER)
+    return reinterpret_cast<T*>(
+        &const_cast<char&>(reinterpret_cast<const volatile char&>(value)));
+#else
     return __builtin_addressof(value);
+#endif
 }
 
 template <typename T>
