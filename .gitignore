@@ -21,9 +21,6 @@
 */build_vs/
 sysroot/
 
-# Generated toolchain sources
-newlib/
-
 # Program-specific generated files
 doom/obj/
 quake/obj/
