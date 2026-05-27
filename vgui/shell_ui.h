@@ -7,7 +7,8 @@ namespace vgui {
 
 class ConsoleLog;
 class KobjNavigator;
-class LaunchRegistry;
+class PanelRegistry;
+struct PluginHost;
 class TaskManagerPanel;
 class VkfmPanel;
 class WindowManager;
@@ -22,17 +23,15 @@ public:
     void request_drop_to_shell(ConsoleLog* log = nullptr, vk::string_view message = vk::string_view());
     void reset_counter(ConsoleLog* log = nullptr, vk::string_view message = vk::string_view());
 
-    void draw(const vk_framebuffer_info_t& framebuffer,
-              LaunchRegistry& launch_registry,
-              WindowManager& window_manager,
-              ConsoleLog& log,
+    void draw(PluginHost& plugin_host,
+              PanelRegistry& panel_registry,
               TaskManagerPanel& task_manager,
               KobjNavigator& kobj_navigator,
               VkfmPanel& vkfm_panel);
 
 private:
     void apply_style();
-    void draw_menu_bar(LaunchRegistry& launch_registry, WindowManager& window_manager, ConsoleLog& log);
+    void draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_registry);
     void draw_info_window(const vk_framebuffer_info_t& framebuffer, WindowManager& window_manager, ConsoleLog& log);
     void draw_settings_window(WindowManager& window_manager, ConsoleLog& log);
     void draw_about_modal();

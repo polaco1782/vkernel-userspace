@@ -7,6 +7,7 @@
 #include "implot.h"
 #include "kobj_panel.h"
 #include "launch_registry.h"
+#include "plugin_registry.h"
 #include "shell_ui.h"
 #include "task_manager_panel.h"
 #include "vkfm_panel.h"
@@ -56,8 +57,15 @@ int main(int /*argc*/, char** /*argv*/)
         vgui::TaskManagerPanel task_manager;
         vgui::KobjNavigator kobj_navigator;
         vgui::VkfmPanel vkfm_panel;
+        vgui::PanelRegistry panel_registry;
         vgui::WindowManager window_manager(log);
         vgui::ShellUi ui;
+        vgui::PluginHost plugin_host {
+            framebuffer,
+            launch_registry,
+            window_manager,
+            log,
+        };
 
         ui.initialize(framebuffer);
 
@@ -87,6 +95,7 @@ int main(int /*argc*/, char** /*argv*/)
         log.add("Use Launch from the menu bar to start staged apps.");
         launch_registry.refresh(log);
         kobj_navigator.refresh_selected();
+        panel_registry.discover(plugin_host);
 
         if (vk_get_api()->vk_set_compositor_active) {
             (void)vk_get_api()->vk_set_compositor_active(1u);
@@ -124,10 +133,8 @@ int main(int /*argc*/, char** /*argv*/)
                 }
             }
 
-            ui.draw(framebuffer,
-                    launch_registry,
-                    window_manager,
-                    log,
+            ui.draw(plugin_host,
+                    panel_registry,
                     task_manager,
                     kobj_navigator,
                     vkfm_panel);
@@ -138,6 +145,7 @@ int main(int /*argc*/, char** /*argv*/)
         }
 
         drop_to_shell = ui.drop_to_shell_requested();
+        panel_registry.shutdown(plugin_host);
         window_manager.shutdown();
     }
 

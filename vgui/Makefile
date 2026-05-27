@@ -25,6 +25,8 @@ CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
 IMGUI_DIR       := ./imgui
 IMPLOT_DIR      := ./implot
+PLUGIN_DIR      := ./plugins
+RUNTIME_PLUGIN_DIR := ./runtime_plugins
 
 # ---- Common flags -------------------------------------------------------
 
@@ -116,15 +118,20 @@ IMPLOT_SRCS :=                         \
 IMPLOT_OBJS := $(IMPLOT_SRCS:.cpp=.o)
 IMPLOT_DEPS := $(IMPLOT_OBJS:.o=.d)
 
-OUR_SRCS   := console_log.cpp       \
-			  imgui_impl_vk.cpp     \
-			  kobj_panel.cpp        \
-			  launch_registry.cpp   \
-			  main.cpp              \
-			  shell_ui.cpp          \
+PLUGIN_SRCS := $(sort $(wildcard $(PLUGIN_DIR)/*.cpp))
+
+OUR_SRCS   := console_log.cpp        \
+			  dynamic_plugin_loader.cpp \
+			  imgui_impl_vk.cpp      \
+			  kobj_panel.cpp         \
+			  launch_registry.cpp    \
+			  main.cpp               \
+			  plugin_registry.cpp    \
+			  shell_ui.cpp           \
 			  task_manager_panel.cpp \
-			  vkfm_panel.cpp        \
-			  window_manager.cpp
+			  vkfm_panel.cpp         \
+			  window_manager.cpp     \
+			  $(PLUGIN_SRCS)
 OUR_OBJS   := $(OUR_SRCS:.cpp=.o)
 OUR_DEPS   := $(OUR_OBJS:.o=.d)
 
@@ -135,9 +142,9 @@ TARGET     := vgui.vbin
 
 # ---- Phony targets ------------------------------------------------------
 
-.PHONY: all clean distclean help libc_build cpp_build
+.PHONY: all clean distclean help libc_build cpp_build runtime_plugins_build
 
-all: _check_imgui _check_implot _check_sysroot $(TARGET)
+all: _check_imgui _check_implot _check_sysroot runtime_plugins_build $(TARGET)
 
 help:
 	@echo "vgui build targets:"
@@ -195,6 +202,9 @@ libc_build:
 cpp_build:
 	@$(MAKE) --no-print-directory -C $(CPP_DIR) CXX=$(CXX) AR=$(AR) $(CPP_MAKE_ARGS)
 
+runtime_plugins_build:
+	@$(MAKE) --no-print-directory -C $(RUNTIME_PLUGIN_DIR) CXX=$(CXX) $(CPP_MAKE_ARGS)
+
 $(CRT0) $(LIBVKSYS): libc_build
 	@:
 
@@ -218,6 +228,8 @@ endif
 
 clean:
 	@rm -f $(TARGET) $(ALL_OBJS) $(ALL_DEPS)
+	@rm -f $(PLUGIN_DIR)/*.o $(PLUGIN_DIR)/*.d
+	@$(MAKE) --no-print-directory -C $(RUNTIME_PLUGIN_DIR) clean
 	@echo "  cleaned."
 
 distclean: clean

@@ -27,6 +27,12 @@ extern "C" {
  * vkernel-specific APIs (not provided by any C standard library)
  * ============================================================ */
 
+static inline void* vk_malloc_executable(vk_usize size) {
+    if (vk_get_api()->vk_malloc_executable)
+        return vk_get_api()->vk_malloc_executable(size);
+    return (void*)0;
+}
+
 /* Block until the task with the given id exits. */
 static inline void vk_wait_task(vk_i64 task_id) {
     if (vk_get_api()->vk_wait_task)

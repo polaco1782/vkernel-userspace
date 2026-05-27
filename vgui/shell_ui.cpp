@@ -3,6 +3,7 @@
 #include "console_log.h"
 #include "kobj_panel.h"
 #include "launch_registry.h"
+#include "plugin_registry.h"
 #include "task_manager_panel.h"
 #include "vkfm_panel.h"
 #include "window_manager.h"
@@ -324,8 +325,12 @@ void ShellUi::apply_style()
     }
 }
 
-void ShellUi::draw_menu_bar(LaunchRegistry& launch_registry, WindowManager& window_manager, ConsoleLog& log)
+void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_registry)
 {
+    LaunchRegistry& launch_registry = plugin_host.launch_registry;
+    WindowManager& window_manager = plugin_host.window_manager;
+    ConsoleLog& log = plugin_host.log;
+
     if (!ImGui::BeginMainMenuBar()) {
         return;
     }
@@ -394,6 +399,10 @@ void ShellUi::draw_menu_bar(LaunchRegistry& launch_registry, WindowManager& wind
         ImGui::MenuItem("Task Manager", nullptr, &show_task_manager_);
         ImGui::MenuItem("KObj Navigator", nullptr, &show_kobj_);
         ImGui::MenuItem("vkfm", nullptr, &show_vkfm_);
+        if (panel_registry.size() > 0) {
+            ImGui::Separator();
+            panel_registry.draw_menu_items();
+        }
         ImGui::Separator();
         ImGui::MenuItem("ImGui Demo", nullptr, &show_demo_);
         ImGui::EndMenu();
@@ -573,22 +582,21 @@ void ShellUi::draw_about_modal()
     }
 }
 
-void ShellUi::draw(const vk_framebuffer_info_t& framebuffer,
-                   LaunchRegistry& launch_registry,
-                   WindowManager& window_manager,
-                   ConsoleLog& log,
+void ShellUi::draw(PluginHost& plugin_host,
+                   PanelRegistry& panel_registry,
                    TaskManagerPanel& task_manager,
                    KobjNavigator& kobj_navigator,
                    VkfmPanel& vkfm_panel)
 {
-    draw_menu_bar(launch_registry, window_manager, log);
-    draw_info_window(framebuffer, window_manager, log);
-    log.draw_window(show_console_, window_manager);
-    task_manager.draw_window(show_task_manager_, window_manager);
-    kobj_navigator.draw_window(show_kobj_, window_manager);
-    vkfm_panel.draw_window(show_vkfm_, window_manager, log);
-    window_manager.draw_windows();
-    draw_settings_window(window_manager, log);
+    draw_menu_bar(plugin_host, panel_registry);
+    draw_info_window(plugin_host.framebuffer, plugin_host.window_manager, plugin_host.log);
+    plugin_host.log.draw_window(show_console_, plugin_host.window_manager);
+    task_manager.draw_window(show_task_manager_, plugin_host.window_manager);
+    kobj_navigator.draw_window(show_kobj_, plugin_host.window_manager);
+    vkfm_panel.draw_window(show_vkfm_, plugin_host.window_manager, plugin_host.log);
+    panel_registry.draw_windows(plugin_host);
+    plugin_host.window_manager.draw_windows();
+    draw_settings_window(plugin_host.window_manager, plugin_host.log);
     draw_about_modal();
 
     if (show_demo_) {
