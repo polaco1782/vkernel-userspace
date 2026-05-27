@@ -272,6 +272,7 @@ void idle_until_next_work(AppState* app)
 {
     const vk_u64 now = VK_CALL(tick_count);
     if (now >= app->timing.next_frame_tick) {
+        app->timing.last_short_wait_tick = 0;
         VK_CALL(yield);
         return;
     }
@@ -280,10 +281,19 @@ void idle_until_next_work(AppState* app)
     if (ticks_until_frame > 1
         && VK_CALL(snd_mix_is_playing, kAudioChannel)
         && app->audio.queue_count >= (kPlayBlockFrames * 2u)) {
+        app->timing.last_short_wait_tick = 0;
         VK_CALL(sleep, ticks_until_frame - 1);
         return;
     }
 
+    /* yield() can reschedule us immediately without advancing the 100 Hz tick. */
+    if (app->timing.last_short_wait_tick == now) {
+        app->timing.last_short_wait_tick = 0;
+        VK_CALL(sleep, 1);
+        return;
+    }
+
+    app->timing.last_short_wait_tick = now;
     VK_CALL(yield);
 }
 
@@ -294,6 +304,7 @@ void set_timing(AppState* app)
     app->timing.frame_tick_remainder = 0;
     app->timing.frame_tick_numerator = ticks_per_second * static_cast<vk_u64>(Settings.FrameTime);
     app->timing.frame_tick_denominator = 1000000u;
+    app->timing.last_short_wait_tick = 0;
 }
 
 void reset_emulator(AppState* app)

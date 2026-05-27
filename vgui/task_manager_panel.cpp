@@ -7,6 +7,15 @@
 
 namespace vgui {
 
+namespace {
+
+auto is_idle_task(const vk_task_info_t& task) -> bool
+{
+    return vk::string_view(task.name).equals("idle");
+}
+
+} // namespace
+
 auto TaskManagerPanel::task_state_label(vk_u32 state) -> const char*
 {
     switch (state) {
@@ -170,7 +179,9 @@ void TaskManagerPanel::refresh()
         const vk_u64 delta = task_cpu_delta(tasks[index], previous_, previous_count_);
         rows_[index].task = tasks[index];
         rows_[index].cpu_percent = static_cast<float>(delta) * 100.0f / static_cast<float>(elapsed_ticks);
-        total_delta += delta;
+        if (!is_idle_task(tasks[index])) {
+            total_delta += delta;
+        }
     }
 
     row_count_ = static_cast<int>(count);

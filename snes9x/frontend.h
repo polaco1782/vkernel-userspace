@@ -81,6 +81,7 @@ struct TimingState {
     vk_u64 frame_tick_numerator = 0;
     vk_u64 frame_tick_denominator = 1;
     vk_u64 frame_tick_remainder = 0;
+    vk_u64 last_short_wait_tick = 0;
 };
 
 struct RomBrowserEntry {
