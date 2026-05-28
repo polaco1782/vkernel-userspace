@@ -1,7 +1,7 @@
-#ifndef VGUI_SQLITE_DB_H
-#define VGUI_SQLITE_DB_H
+#ifndef VKGUI_SQLITE_DB_H
+#define VKGUI_SQLITE_DB_H
 
-#include "vgui_common.h"
+#include "vkgui_common.h"
 
 #include <string>
 
@@ -85,4 +85,4 @@ private:
 
 } // namespace vkgui
 
-#endif // VGUI_SQLITE_DB_H
+#endif // VKGUI_SQLITE_DB_H

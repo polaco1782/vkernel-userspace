@@ -1,4 +1,4 @@
-# vkernel userspace - vgui (Dear ImGui demo)
+# vkernel userspace - vkgui (Dear ImGui demo)
 # Copyright (C) 2026 vkernel authors
 #
 # Builds a static PIE binary linked against newlib + vkernel CRT.
@@ -176,7 +176,7 @@ OUR_DEPS   := $(OUR_OBJS:.o=.d)
 ALL_OBJS   := $(IMGUI_OBJS) $(IMPLOT_OBJS) $(SQLITE_OBJS) $(OUR_OBJS)
 ALL_DEPS   := $(IMGUI_DEPS) $(IMPLOT_DEPS) $(SQLITE_DEPS) $(OUR_DEPS)
 
-TARGET     := vgui.vbin
+TARGET     := vkgui.vbin
 
 # ---- Phony targets ------------------------------------------------------
 
@@ -185,7 +185,7 @@ TARGET     := vgui.vbin
 all: _check_imgui _check_implot _check_sysroot runtime_plugins_build $(TARGET)
 
 help:
-	@echo "vgui build targets:"
+	@echo "vkgui build targets:"
 	@echo "  make              – release build"
 	@echo "  make DEBUG=1      – debug build"
 	@echo "  make clean        – remove objects and binary"

@@ -5,7 +5,7 @@ USER_INCLUDE   := $(ROOT_DIR)/userspace/include
 SYSROOT        := $(ROOT_DIR)/userspace/sysroot
 CPP_INCLUDE    := $(ROOT_DIR)/userspace/cpp/include
 KERNEL_INCLUDE := $(ROOT_DIR)/include
-VGUI_DIR       := $(ROOT_DIR)/userspace/vgui
+VKGUI_DIR       := $(ROOT_DIR)/userspace/vkgui
 
 DEPFLAGS := -MMD -MP
 
@@ -29,7 +29,7 @@ CXXFLAGS  += -isystem $(SYSROOT)/include
 CXXFLAGS  += -I$(USER_INCLUDE)
 CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
-CXXFLAGS  += -I$(VGUI_DIR)
+CXXFLAGS  += -I$(VKGUI_DIR)
 
 LDFLAGS  := -nostdlib
 LDFLAGS  += -shared

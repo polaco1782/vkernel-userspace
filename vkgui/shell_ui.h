@@ -1,8 +1,8 @@
-#ifndef VGUI_SHELL_UI_H
-#define VGUI_SHELL_UI_H
+#ifndef VKGUI_SHELL_UI_H
+#define VKGUI_SHELL_UI_H
 
 #include "settings_store.h"
-#include "vgui_common.h"
+#include "vkgui_common.h"
 
 namespace vkgui {
 
@@ -68,4 +68,4 @@ private:
 
 } // namespace vkgui
 
-#endif // VGUI_SHELL_UI_H
+#endif // VKGUI_SHELL_UI_H

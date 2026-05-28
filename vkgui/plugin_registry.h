@@ -1,5 +1,5 @@
-#ifndef VGUI_PLUGIN_REGISTRY_H
-#define VGUI_PLUGIN_REGISTRY_H
+#ifndef VKGUI_PLUGIN_REGISTRY_H
+#define VKGUI_PLUGIN_REGISTRY_H
 
 #include "plugin_host.h"
 
@@ -52,4 +52,4 @@ private:
 
 } // namespace vkgui
 
-#endif // VGUI_PLUGIN_REGISTRY_H
+#endif // VKGUI_PLUGIN_REGISTRY_H

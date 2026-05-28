@@ -1,7 +1,7 @@
-#ifndef VGUI_PLUGIN_HOST_H
-#define VGUI_PLUGIN_HOST_H
+#ifndef VKGUI_PLUGIN_HOST_H
+#define VKGUI_PLUGIN_HOST_H
 
-#include "vgui_common.h"
+#include "vkgui_common.h"
 
 namespace vkgui {
 
@@ -18,4 +18,4 @@ struct PluginHost {
 
 } // namespace vkgui
 
-#endif // VGUI_PLUGIN_HOST_H
+#endif // VKGUI_PLUGIN_HOST_H

@@ -1,5 +1,5 @@
-#ifndef VGUI_COMMON_H
-#define VGUI_COMMON_H
+#ifndef VKGUI_COMMON_H
+#define VKGUI_COMMON_H
 
 #include "../include/vk.h"
 #include "imgui/imgui.h"
@@ -303,4 +303,4 @@ inline auto imgui_begin_window_readable_caption(const char* name,
 
 } // namespace vkgui
 
-#endif // VGUI_COMMON_H
+#endif // VKGUI_COMMON_H

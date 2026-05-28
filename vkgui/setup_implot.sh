@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# vgui/setup_implot.sh
-# Downloads the ImPlot source files needed to build vgui.
-# Run once from the vgui/ directory before running make.
+# vkgui/setup_implot.sh
+# Downloads the ImPlot source files needed to build vkgui.
+# Run once from the vkgui/ directory before running make.
 
 set -euo pipefail
 

@@ -255,19 +255,19 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
         default_app_height_ = 200;
     }
 
-    if (settings_store_.open("/vgui_settings.db")) {
+    if (settings_store_.open("/vkgui_settings.db")) {
         PersistedSettings settings = current_settings_snapshot();
         if (settings_store_.load(settings)) {
             apply_saved_settings(settings);
             last_saved_settings_ = settings;
             settings_store_ready_ = true;
-            log->add("vGUI settings: loaded saved settings from /vgui_settings.db.");
+            log->add("vkGUI settings: loaded saved settings from /vkgui_settings.db.");
         } else if (log != nullptr) {
-            log->addf("vGUI settings: failed to load /vgui_settings.db (%s).",
+            log->addf("vkGUI settings: failed to load /vkgui_settings.db (%s).",
                       settings_store_.last_error().c_str());
         }
     } else if (log != nullptr) {
-        log->addf("vGUI settings: failed to open /vgui_settings.db (%s).",
+        log->addf("vkGUI settings: failed to open /vkgui_settings.db (%s).",
                   settings_store_.last_error().c_str());
     }
 
@@ -393,7 +393,7 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Drop to Shell")) {
-            request_drop_to_shell(&log, "File > Drop to Shell: replacing vGUI with shell.vbin.");
+            request_drop_to_shell(&log, "File > Drop to Shell: replacing vkGUI with shell.vbin.");
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Quit", "Ctrl+Q")) {
@@ -461,7 +461,7 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
     }
 
     if (ImGui::BeginMenu("Help")) {
-        if (ImGui::MenuItem("About vGUI...")) {
+        if (ImGui::MenuItem("About vkGUI...")) {
             open_about_ = true;
         }
         ImGui::EndMenu();
@@ -606,7 +606,7 @@ void ShellUi::draw_settings_window(WindowManager& window_manager, ConsoleLog& lo
 void ShellUi::draw_about_modal()
 {
     if (open_about_) {
-        ImGui::OpenPopup("About vGUI");
+        ImGui::OpenPopup("About vkGUI");
         open_about_ = false;
     }
 
@@ -614,8 +614,8 @@ void ShellUi::draw_about_modal()
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(320.0f, 160.0f), ImGuiCond_Always);
 
-    if (ImGui::BeginPopupModal("About vGUI", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
-        ImGui::TextWrapped("vGUI - Dear ImGui GUI for vkernel");
+    if (ImGui::BeginPopupModal("About vkGUI", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+        ImGui::TextWrapped("vkGUI - Dear ImGui GUI for vkernel");
         ImGui::Spacing();
         ImGui::TextWrapped("Software renderer: barycentric triangle fill,");
         ImGui::TextWrapped("alpha-8 font atlas, framebuffer blending.");
@@ -646,7 +646,7 @@ void ShellUi::sync_settings(ConsoleLog& log)
     }
 
     if (!settings_store_.save(current)) {
-        log.addf("vGUI settings: failed to save /vgui_settings.db (%s).",
+        log.addf("vkGUI settings: failed to save /vkgui_settings.db (%s).",
                  settings_store_.last_error().c_str());
         settings_store_ready_ = false;
         return;

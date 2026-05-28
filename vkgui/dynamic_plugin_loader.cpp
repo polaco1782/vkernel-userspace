@@ -1,7 +1,7 @@
 #include "dynamic_plugin_loader.h"
 
 #include "console_log.h"
-#include "vgui_common.h"
+#include "vkgui_common.h"
 #include "window_manager.h"
 
 #include "vkernel/elf.h"
@@ -17,7 +17,7 @@ namespace {
 
 using init_array_fn = void (*)();
 
-constexpr auto k_plugin_init_symbol = "vgui_plugin_init";
+constexpr auto k_plugin_init_symbol = "vkgui_plugin_init";
 constexpr auto k_min_image_alignment = 4096ULL;
 
 PluginHost* g_active_plugin_host = nullptr;
@@ -160,10 +160,10 @@ void host_logf(const char* fmt, ...)
     host->log.add(buffer.data());
 }
 
-auto plugin_host_api() -> const vgui_plugin_host_api_t&
+auto plugin_host_api() -> const vkgui_plugin_host_api_t&
 {
-    static const vgui_plugin_host_api_t api = {
-        VGUI_PLUGIN_HOST_API_VERSION,
+    static const vkgui_plugin_host_api_t api = {
+        VKGUI_PLUGIN_HOST_API_VERSION,
         vk_get_api(),
         host_set_next_window_pos_first_use,
         host_set_next_window_size_first_use,
@@ -451,12 +451,12 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
 
     std::string file_bytes;
     if (!read_file_bytes(path, file_bytes)) {
-        host.log.addf("vGUI plugin loader: failed to read %s.", string_from_view(path).c_str());
+        host.log.addf("vkGUI plugin loader: failed to read %s.", string_from_view(path).c_str());
         return false;
     }
 
     if (file_bytes.size() < sizeof(vk::elf::Elf64_Ehdr)) {
-        host.log.addf("vGUI plugin loader: %s is too small.", string_from_view(path).c_str());
+        host.log.addf("vkGUI plugin loader: %s is too small.", string_from_view(path).c_str());
         return false;
     }
 
@@ -470,7 +470,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
         || ehdr.e_ident[vk::elf::EI_DATA] != vk::elf::ELFDATA2LSB
         || ehdr.e_machine != vk::elf::EM_X86_64
         || ehdr.e_type != vk::elf::ET_DYN) {
-        host.log.addf("vGUI plugin loader: %s is not a supported x86_64 ET_DYN plugin.",
+        host.log.addf("vkGUI plugin loader: %s is not a supported x86_64 ET_DYN plugin.",
                       string_from_view(path).c_str());
         return false;
     }
@@ -479,7 +479,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
         || !range_ok(file_bytes.size(),
                      ehdr.e_phoff,
                      static_cast<vk_u64>(ehdr.e_phnum) * sizeof(vk::elf::Elf64_Phdr))) {
-        host.log.addf("vGUI plugin loader: %s has an invalid program header table.",
+        host.log.addf("vkGUI plugin loader: %s has an invalid program header table.",
                       string_from_view(path).c_str());
         return false;
     }
@@ -496,7 +496,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
             continue;
         }
         if (!range_ok(file_bytes.size(), phdr.p_offset, phdr.p_filesz)) {
-            host.log.addf("vGUI plugin loader: %s has an out-of-range load segment.",
+            host.log.addf("vkGUI plugin loader: %s has an out-of-range load segment.",
                           string_from_view(path).c_str());
             return false;
         }
@@ -515,7 +515,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
     }
 
     if (load_count == 0 || vaddr_min == ~0ULL || vaddr_max <= vaddr_min) {
-        host.log.addf("vGUI plugin loader: %s does not contain loadable segments.",
+        host.log.addf("vkGUI plugin loader: %s does not contain loadable segments.",
                       string_from_view(path).c_str());
         return false;
     }
@@ -523,7 +523,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
     const vk_u64 image_bytes = align_up(vaddr_max - vaddr_min, k_min_image_alignment);
     raw_allocation_ = vk_malloc_executable(static_cast<vk_usize>(image_bytes + max_align));
     if (raw_allocation_ == nullptr) {
-        host.log.addf("vGUI plugin loader: executable allocation failed for %s.",
+        host.log.addf("vkGUI plugin loader: executable allocation failed for %s.",
                       string_from_view(path).c_str());
         return false;
     }
@@ -554,7 +554,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
 
     dynamic_info dyn {};
     if (!resolve_dynamic_info(ehdr, phdrs, image_base_, load_bias, dyn) || !apply_relocations(image_base_, load_bias, dyn)) {
-        host.log.addf("vGUI plugin loader: unsupported relocations in %s.",
+        host.log.addf("vkGUI plugin loader: unsupported relocations in %s.",
                       string_from_view(path).c_str());
         reset();
         return false;
@@ -562,7 +562,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
 
     dynsym_info dynsym {};
     if (!collect_dynsym_info(file_data, file_bytes.size(), ehdr, dynsym)) {
-        host.log.addf("vGUI plugin loader: %s is missing a usable dynamic symbol table.",
+        host.log.addf("vkGUI plugin loader: %s is missing a usable dynamic symbol table.",
                       string_from_view(path).c_str());
         reset();
         return false;
@@ -576,24 +576,24 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
 
     const vk_u64 init_address = find_symbol_address(dynsym, k_plugin_init_symbol, load_bias);
     if (init_address == 0) {
-        host.log.addf("vGUI plugin loader: %s does not export %s.",
+        host.log.addf("vkGUI plugin loader: %s does not export %s.",
                       string_from_view(path).c_str(),
                       k_plugin_init_symbol);
         reset();
         return false;
     }
 
-    const auto init = reinterpret_cast<vgui_plugin_init_fn>(init_address);
+    const auto init = reinterpret_cast<vkgui_plugin_init_fn>(init_address);
     set_active_plugin_host(&host);
     const int init_ok = init(&plugin_host_api(), &descriptor_);
     clear_active_plugin_host();
 
     if (init_ok == 0
-        || descriptor_.abi_version != VGUI_PLUGIN_ABI_VERSION
+        || descriptor_.abi_version != VKGUI_PLUGIN_ABI_VERSION
         || descriptor_.id == nullptr
         || descriptor_.menu_label == nullptr
         || descriptor_.draw_window == nullptr) {
-        host.log.addf("vGUI plugin loader: %s rejected the plugin ABI handshake.",
+        host.log.addf("vkGUI plugin loader: %s rejected the plugin ABI handshake.",
                       string_from_view(path).c_str());
         reset();
         return false;
@@ -606,7 +606,7 @@ auto DynamicPluginModule::load(vk::string_view path, PluginHost& host) -> bool
     }
 
     valid_ = true;
-    host.log.addf("vGUI plugin loader: loaded %s from %s.",
+    host.log.addf("vkGUI plugin loader: loaded %s from %s.",
                   descriptor_.menu_label,
                   string_from_view(path).c_str());
     return true;

@@ -11,7 +11,7 @@ namespace vkgui {
 
 namespace {
 
-constexpr auto k_plugin_manifest_path = "vgui_plugins.txt";
+constexpr auto k_plugin_manifest_path = "vkgui_plugins.txt";
 
 class DynamicPanelPlugin final : public PanelPlugin {
 public:
@@ -94,7 +94,7 @@ void PanelRegistry::sort_plugins()
 void PanelRegistry::add_external_plugin(vk::string_view path, PluginHost& host)
 {
     if (plugin_count_ >= k_max_plugins) {
-        host.log.add("vGUI plugin loader: plugin limit reached.");
+        host.log.add("vkGUI plugin loader: plugin limit reached.");
         return;
     }
 
@@ -103,7 +103,7 @@ void PanelRegistry::add_external_plugin(vk::string_view path, PluginHost& host)
         return;
     }
     if (contains_id(module.descriptor().id)) {
-        host.log.addf("vGUI plugin loader: duplicate plugin id '%s' ignored.",
+        host.log.addf("vkGUI plugin loader: duplicate plugin id '%s' ignored.",
                       module.descriptor().id);
         module.unload(host);
         return;
@@ -111,7 +111,7 @@ void PanelRegistry::add_external_plugin(vk::string_view path, PluginHost& host)
 
     auto* plugin = new (std::nothrow) DynamicPanelPlugin(std::move(module));
     if (plugin == nullptr) {
-        host.log.addf("vGUI plugin loader: failed to allocate plugin wrapper for %s.",
+        host.log.addf("vkGUI plugin loader: failed to allocate plugin wrapper for %s.",
                       string_from_view(path).c_str());
         return;
     }
@@ -123,7 +123,7 @@ void PanelRegistry::load_external_plugins(PluginHost& host)
 {
     const vk_file_handle_t handle = VK_CALL(file_open, k_plugin_manifest_path, "r");
     if (handle == static_cast<vk_file_handle_t>(0)) {
-        host.log.add("vGUI plugin loader: plugin manifest not found.");
+        host.log.add("vkGUI plugin loader: plugin manifest not found.");
         return;
     }
 

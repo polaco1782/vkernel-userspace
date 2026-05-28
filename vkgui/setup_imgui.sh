@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# vgui/setup_imgui.sh
-# Downloads the Dear ImGui source files needed to build vgui.
-# Run once from the vgui/ directory before running make.
+# vkgui/setup_imgui.sh
+# Downloads the Dear ImGui source files needed to build vkgui.
+# Run once from the vkgui/ directory before running make.
 
 set -euo pipefail
 

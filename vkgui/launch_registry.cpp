@@ -8,7 +8,7 @@ namespace vkgui {
 
 namespace {
 
-constexpr auto k_manifest_path = "vgui_apps.txt";
+constexpr auto k_manifest_path = "vkgui_apps.txt";
 constexpr auto k_fallback_manifest_path = "shell.txt";
 
 } // namespace

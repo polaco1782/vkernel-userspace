@@ -39,7 +39,7 @@ auto SettingsStore::open(vk::string_view path) -> bool
         return false;
     }
 
-    /* vGUI settings favor simple persistence over crash-hard durability.
+    /* vkGUI settings favor simple persistence over crash-hard durability.
        Keeping the rollback journal in memory avoids filesystem features
        our current userspace storage layer does not fully emulate yet. */
     if (!database_.exec(k_settings_pragmas)) {

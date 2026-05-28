@@ -3,8 +3,8 @@
 #include "disasm.h"
 #include "util.h"
 
-#include "../vgui/imgui/imgui.h"
-#include "../vgui/imgui_impl_vk.h"
+#include "../vkgui/imgui/imgui.h"
+#include "../vkgui/imgui_impl_vk.h"
 
 #include <cstdio>
 

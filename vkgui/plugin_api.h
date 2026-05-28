@@ -1,5 +1,5 @@
-#ifndef VGUI_PLUGIN_API_H
-#define VGUI_PLUGIN_API_H
+#ifndef VKGUI_PLUGIN_API_H
+#define VKGUI_PLUGIN_API_H
 
 #include "../include/vk.h"
 
@@ -7,10 +7,10 @@
 extern "C" {
 #endif
 
-#define VGUI_PLUGIN_HOST_API_VERSION 1ULL
-#define VGUI_PLUGIN_ABI_VERSION 1ULL
+#define VKGUI_PLUGIN_HOST_API_VERSION 1ULL
+#define VKGUI_PLUGIN_ABI_VERSION 1ULL
 
-typedef struct vgui_plugin_host_api {
+typedef struct vkgui_plugin_host_api {
     vk_u64 abi_version;
     const vk_api_t* vk_api;
 
@@ -27,28 +27,28 @@ typedef struct vgui_plugin_host_api {
     void (*spacing)(void);
     void (*log)(const char* text);
     void (*logf)(const char* fmt, ...);
-} vgui_plugin_host_api_t;
+} vkgui_plugin_host_api_t;
 
-typedef void (*vgui_plugin_shutdown_fn)(void* user_data);
-typedef void (*vgui_plugin_draw_window_fn)(const vgui_plugin_host_api_t* host,
+typedef void (*vkgui_plugin_shutdown_fn)(void* user_data);
+typedef void (*vkgui_plugin_draw_window_fn)(const vkgui_plugin_host_api_t* host,
                                            vk_u32* visible,
                                            void* user_data);
 
-typedef struct vgui_plugin_descriptor {
+typedef struct vkgui_plugin_descriptor {
     vk_u64 abi_version;
     const char* id;
     const char* menu_label;
     vk_u32 default_visible;
     void* user_data;
-    vgui_plugin_shutdown_fn shutdown;
-    vgui_plugin_draw_window_fn draw_window;
-} vgui_plugin_descriptor_t;
+    vkgui_plugin_shutdown_fn shutdown;
+    vkgui_plugin_draw_window_fn draw_window;
+} vkgui_plugin_descriptor_t;
 
-typedef int (*vgui_plugin_init_fn)(const vgui_plugin_host_api_t* host,
-                                   vgui_plugin_descriptor_t* out_descriptor);
+typedef int (*vkgui_plugin_init_fn)(const vkgui_plugin_host_api_t* host,
+                                   vkgui_plugin_descriptor_t* out_descriptor);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VGUI_PLUGIN_API_H
+#endif // VKGUI_PLUGIN_API_H

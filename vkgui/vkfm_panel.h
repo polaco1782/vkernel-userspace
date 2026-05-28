@@ -1,7 +1,7 @@
-#ifndef VGUI_VKFM_PANEL_H
-#define VGUI_VKFM_PANEL_H
+#ifndef VKGUI_VKFM_PANEL_H
+#define VKGUI_VKFM_PANEL_H
 
-#include "vgui_common.h"
+#include "vkgui_common.h"
 
 namespace vkgui {
 
@@ -48,4 +48,4 @@ private:
 
 } // namespace vkgui
 
-#endif // VGUI_VKFM_PANEL_H
+#endif // VKGUI_VKFM_PANEL_H

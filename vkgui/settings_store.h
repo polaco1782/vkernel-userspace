@@ -1,5 +1,5 @@
-#ifndef VGUI_SETTINGS_STORE_H
-#define VGUI_SETTINGS_STORE_H
+#ifndef VKGUI_SETTINGS_STORE_H
+#define VKGUI_SETTINGS_STORE_H
 
 #include "sqlite_db.h"
 
@@ -51,4 +51,4 @@ private:
 
 } // namespace vkgui
 
-#endif // VGUI_SETTINGS_STORE_H
+#endif // VKGUI_SETTINGS_STORE_H

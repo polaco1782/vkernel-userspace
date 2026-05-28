@@ -84,7 +84,7 @@ int main(int /*argc*/, char** /*argv*/)
         style.AntiAliasedLinesUseTex = false;
         style.AntiAliasedFill = false;
 
-        log.add("vGUI started.");
+        log.add("vkGUI started.");
         log.addf("Framebuffer: %ux%u @ %s",
                  framebuffer.width,
                  framebuffer.height,

@@ -9,8 +9,8 @@ LIBC_DIR        := ../libc
 CPP_DIR         := ../cpp
 CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
-VGUI_DIR        := ../vgui
-IMGUI_DIR       := $(VGUI_DIR)/imgui
+VKGUI_DIR        := ../vkgui
+IMGUI_DIR       := $(VKGUI_DIR)/imgui
 BUILD_DIR       := build
 
 DEPFLAGS := -MMD -MP
@@ -35,7 +35,7 @@ CXXFLAGS  += -isystem $(SYSROOT)/include
 CXXFLAGS  += -I$(USER_INCLUDE)
 CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
-CXXFLAGS  += -I$(VGUI_DIR)
+CXXFLAGS  += -I$(VKGUI_DIR)
 CXXFLAGS  += -I$(IMGUI_DIR)
 
 IMGUI_CXXFLAGS := $(CXXFLAGS)
@@ -96,13 +96,13 @@ IMGUI_SRCS := $(IMGUI_DIR)/imgui.cpp      \
 		      $(IMGUI_DIR)/imgui_tables.cpp \
 		      $(IMGUI_DIR)/imgui_widgets.cpp
 
-VGUI_SRCS := $(VGUI_DIR)/imgui_impl_vk.cpp
+VKGUI_SRCS := $(VKGUI_DIR)/imgui_impl_vk.cpp
 
 CORE_OBJS  := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CORE_SRCS))
-IMGUI_OBJS := $(patsubst $(IMGUI_DIR)/%.cpp,$(BUILD_DIR)/imgui/%.o,$(IMGUI_SRCS))
-VGUI_OBJS  := $(patsubst $(VGUI_DIR)/%.cpp,$(BUILD_DIR)/vgui/%.o,$(VGUI_SRCS))
+IMGUI_OBJS := $(patsubst $(IMGUI_DIR)/%.cpp,$(BUILD_DIR)/vkgui_imgui/%.o,$(IMGUI_SRCS))
+VKGUI_OBJS  := $(patsubst $(VKGUI_DIR)/%.cpp,$(BUILD_DIR)/vkgui/%.o,$(VKGUI_SRCS))
 
-ALL_OBJS := $(CORE_OBJS) $(IMGUI_OBJS) $(VGUI_OBJS)
+ALL_OBJS := $(CORE_OBJS) $(IMGUI_OBJS) $(VKGUI_OBJS)
 ALL_DEPS := $(ALL_OBJS:.o=.d)
 
 TARGET := vnes.vbin
@@ -115,7 +115,7 @@ _check_imgui:
 	@test -f $(IMGUI_DIR)/imgui.h || \
 	    { echo ""; \
 	      echo "  ERROR: ImGui sources not found in $(IMGUI_DIR)/"; \
-	      echo "  Run:  bash ../vgui/setup_imgui.sh"; \
+	      echo "  Run:  bash ../vkgui/setup_imgui.sh"; \
 	      echo ""; exit 1; }
 
 _check_sysroot:
@@ -130,13 +130,13 @@ $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
 
-$(BUILD_DIR)/imgui/%.o: $(IMGUI_DIR)/%.cpp
+$(BUILD_DIR)/vkgui_imgui/%.o: $(IMGUI_DIR)/%.cpp
 	@echo "  CXX [imgui] $<"
 	@mkdir -p $(dir $@)
 	@$(CXX) $(IMGUI_CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
 
-$(BUILD_DIR)/vgui/%.o: $(VGUI_DIR)/%.cpp
-	@echo "  CXX [vgui]  $<"
+$(BUILD_DIR)/vkgui/%.o: $(VKGUI_DIR)/%.cpp
+	@echo "  CXX [vkgui]  $<"
 	@mkdir -p $(dir $@)
 	@$(CXX) $(IMGUI_CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
 

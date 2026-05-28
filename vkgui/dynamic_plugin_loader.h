@@ -1,5 +1,5 @@
-#ifndef VGUI_DYNAMIC_PLUGIN_LOADER_H
-#define VGUI_DYNAMIC_PLUGIN_LOADER_H
+#ifndef VKGUI_DYNAMIC_PLUGIN_LOADER_H
+#define VKGUI_DYNAMIC_PLUGIN_LOADER_H
 
 #include "plugin_api.h"
 #include "plugin_host.h"
@@ -22,7 +22,7 @@ public:
     void draw_window(PluginHost& host, bool& visible);
 
     [[nodiscard]] auto valid() const noexcept -> bool { return valid_; }
-    [[nodiscard]] auto descriptor() const noexcept -> const vgui_plugin_descriptor_t& { return descriptor_; }
+    [[nodiscard]] auto descriptor() const noexcept -> const vkgui_plugin_descriptor_t& { return descriptor_; }
 
 private:
     using init_array_fn = void (*)();
@@ -35,10 +35,10 @@ private:
     vk_usize image_size_ = 0;
     init_array_fn* fini_array_ = nullptr;
     vk_usize fini_count_ = 0;
-    vgui_plugin_descriptor_t descriptor_ {};
+    vkgui_plugin_descriptor_t descriptor_ {};
     bool valid_ = false;
 };
 
 } // namespace vkgui
 
-#endif // VGUI_DYNAMIC_PLUGIN_LOADER_H
+#endif // VKGUI_DYNAMIC_PLUGIN_LOADER_H

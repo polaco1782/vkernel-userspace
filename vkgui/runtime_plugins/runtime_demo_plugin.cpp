@@ -12,9 +12,9 @@ void runtime_demo_shutdown(void* /*user_data*/)
 {
 }
 
-void runtime_demo_draw(const vgui_plugin_host_api_t* host, vk_u32* visible, void* user_data)
+void runtime_demo_draw(const vkgui_plugin_host_api_t* host, vk_u32* visible, void* user_data)
 {
-    if (host == nullptr || host->abi_version != VGUI_PLUGIN_HOST_API_VERSION || visible == nullptr) {
+    if (host == nullptr || host->abi_version != VKGUI_PLUGIN_HOST_API_VERSION || visible == nullptr) {
         return;
     }
 
@@ -50,17 +50,17 @@ void runtime_demo_draw(const vgui_plugin_host_api_t* host, vk_u32* visible, void
 } // namespace
 
 extern "C" __attribute__((visibility("default")))
-int vgui_plugin_init(const vgui_plugin_host_api_t* host,
-                     vgui_plugin_descriptor_t* out_descriptor)
+int vkgui_plugin_init(const vkgui_plugin_host_api_t* host,
+                     vkgui_plugin_descriptor_t* out_descriptor)
 {
     if (host == nullptr
-        || host->abi_version != VGUI_PLUGIN_HOST_API_VERSION
+        || host->abi_version != VKGUI_PLUGIN_HOST_API_VERSION
         || host->vk_api == nullptr
         || out_descriptor == nullptr) {
         return 0;
     }
 
-    out_descriptor->abi_version = VGUI_PLUGIN_ABI_VERSION;
+    out_descriptor->abi_version = VKGUI_PLUGIN_ABI_VERSION;
     out_descriptor->id = "runtime_demo";
     out_descriptor->menu_label = "Runtime Demo";
     out_descriptor->default_visible = 0u;
