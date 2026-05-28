@@ -1,0 +1,201 @@
+#ifndef VKCPP_STRING_VIEW_H
+#define VKCPP_STRING_VIEW_H
+
+#include <cstddef>
+#include <string>
+
+namespace std {
+
+template <typename CharT, typename Traits = char_traits<CharT>>
+class basic_string_view {
+public:
+    using traits_type = Traits;
+    using value_type = CharT;
+    using pointer = value_type*;
+    using const_pointer = const value_type*;
+    using const_iterator = const value_type*;
+    using iterator = const_iterator;
+    using const_reference = const value_type&;
+    using reference = const_reference;
+    using size_type = size_t;
+
+    static constexpr size_type npos = static_cast<size_type>(-1);
+
+    constexpr basic_string_view() noexcept : data_(nullptr), size_(0) {}
+
+    constexpr basic_string_view(const CharT* text) noexcept
+        : data_(text),
+          size_(text != nullptr ? traits_type::length(text) : 0) {}
+
+    constexpr basic_string_view(const CharT* text, size_type size) noexcept
+        : data_(text), size_(size) {}
+
+    template <typename Alloc>
+    constexpr basic_string_view(const basic_string<CharT, Traits, Alloc>& text) noexcept
+        : data_(text.data()), size_(text.size()) {}
+
+    template <size_type N>
+    constexpr basic_string_view(const CharT (&text)[N]) noexcept
+        : data_(text), size_(N > 0 ? N - 1 : 0) {}
+
+    [[nodiscard]] constexpr auto data() const noexcept -> const_pointer { return data_; }
+    [[nodiscard]] constexpr auto size() const noexcept -> size_type { return size_; }
+    [[nodiscard]] constexpr auto length() const noexcept -> size_type { return size_; }
+    [[nodiscard]] constexpr auto empty() const noexcept -> bool { return size_ == 0; }
+
+    [[nodiscard]] constexpr auto begin() const noexcept -> const_iterator { return data_; }
+    [[nodiscard]] constexpr auto end() const noexcept -> const_iterator { return data_ + size_; }
+
+    [[nodiscard]] constexpr auto operator[](size_type index) const noexcept -> const_reference
+    {
+        return data_[index];
+    }
+
+    constexpr void remove_prefix(size_type count) noexcept
+    {
+        if (count > size_) {
+            count = size_;
+        }
+        data_ += count;
+        size_ -= count;
+    }
+
+    constexpr void remove_suffix(size_type count) noexcept
+    {
+        if (count > size_) {
+            count = size_;
+        }
+        size_ -= count;
+    }
+
+    [[nodiscard]] constexpr auto substr(size_type pos, size_type count = npos) const noexcept -> basic_string_view
+    {
+        if (pos > size_) {
+            pos = size_;
+        }
+        const size_type available = size_ - pos;
+        if (count > available) {
+            count = available;
+        }
+        return basic_string_view(data_ + pos, count);
+    }
+
+    [[nodiscard]] constexpr auto starts_with(basic_string_view prefix) const noexcept -> bool
+    {
+        if (prefix.size_ > size_) {
+            return false;
+        }
+        for (size_type index = 0; index < prefix.size_; ++index) {
+            if (!traits_type::eq(data_[index], prefix.data_[index])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [[nodiscard]] constexpr auto ends_with(basic_string_view suffix) const noexcept -> bool
+    {
+        if (suffix.size_ > size_) {
+            return false;
+        }
+        const size_type start = size_ - suffix.size_;
+        for (size_type index = 0; index < suffix.size_; ++index) {
+            if (!traits_type::eq(data_[start + index], suffix.data_[index])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [[nodiscard]] constexpr auto compare(basic_string_view other) const noexcept -> int
+    {
+        const size_type shared = size_ < other.size_ ? size_ : other.size_;
+        const int result = traits_type::compare(data_, other.data_, shared);
+        if (result != 0) {
+            return result;
+        }
+        if (size_ == other.size_) {
+            return 0;
+        }
+        return size_ < other.size_ ? -1 : 1;
+    }
+
+    [[nodiscard]] constexpr auto find(CharT ch, size_type pos = 0) const noexcept -> size_type
+    {
+        for (size_type index = pos; index < size_; ++index) {
+            if (traits_type::eq(data_[index], ch)) {
+                return index;
+            }
+        }
+        return npos;
+    }
+
+    [[nodiscard]] constexpr auto find(basic_string_view needle, size_type pos = 0) const noexcept -> size_type
+    {
+        if (needle.empty()) {
+            return pos <= size_ ? pos : size_;
+        }
+        if (needle.size_ > size_ || pos > size_ - needle.size_) {
+            return npos;
+        }
+
+        for (size_type index = pos; index + needle.size_ <= size_; ++index) {
+            if (traits_type::compare(data_ + index, needle.data_, needle.size_) == 0) {
+                return index;
+            }
+        }
+        return npos;
+    }
+
+private:
+    const_pointer data_;
+    size_type size_;
+};
+
+using string_view = basic_string_view<char>;
+
+template <typename CharT, typename Traits>
+[[nodiscard]] constexpr auto operator==(basic_string_view<CharT, Traits> lhs,
+                                        basic_string_view<CharT, Traits> rhs) noexcept -> bool
+{
+    return lhs.compare(rhs) == 0;
+}
+
+template <typename CharT, typename Traits>
+[[nodiscard]] constexpr auto operator==(basic_string_view<CharT, Traits> lhs,
+                                        const CharT* rhs) noexcept -> bool
+{
+    return lhs == basic_string_view<CharT, Traits>(rhs);
+}
+
+template <typename CharT, typename Traits>
+[[nodiscard]] constexpr auto operator==(const CharT* lhs,
+                                        basic_string_view<CharT, Traits> rhs) noexcept -> bool
+{
+    return basic_string_view<CharT, Traits>(lhs) == rhs;
+}
+
+template <typename CharT, typename Traits>
+[[nodiscard]] constexpr auto operator!=(basic_string_view<CharT, Traits> lhs,
+                                        basic_string_view<CharT, Traits> rhs) noexcept -> bool
+{
+    return !(lhs == rhs);
+}
+
+template <typename CharT, typename Traits>
+[[nodiscard]] constexpr auto operator!=(basic_string_view<CharT, Traits> lhs,
+                                        const CharT* rhs) noexcept -> bool
+{
+    return !(lhs == rhs);
+}
+
+template <typename CharT, typename Traits>
+[[nodiscard]] constexpr auto operator!=(const CharT* lhs,
+                                        basic_string_view<CharT, Traits> rhs) noexcept -> bool
+{
+    return !(lhs == rhs);
+}
+
+} // namespace std
+
+#endif // VKCPP_STRING_VIEW_H
