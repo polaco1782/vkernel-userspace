@@ -27,27 +27,45 @@ qboolean isDedicated;
 /* ---------------------------------------------------------------
  * File I/O — thin wrappers around standard fopen/fread/fwrite
  *
- * VK has a flat ramfs: files are stored as bare names ("pak0.pak").
- * Quake builds paths like "./id1/pak0.pak". We resolve by trying
- * the full path first, then falling back to the basename.
+ * Quake builds relative paths like "./id1/pak0.pak". On vkernel these
+ * assets live under /data/quake, so relative opens are redirected there.
  * --------------------------------------------------------------- */
 
-/* Return a pointer to the bare filename component (after last '/') */
-static const char *vk_basename(const char *path)
+static const char *vk_trim_relative_prefix(const char *path)
 {
-    const char *s = strrchr(path, '/');
-    return s ? s + 1 : path;
+    while (path != NULL && path[0] == '.' && path[1] == '/')
+        path += 2;
+    return path;
 }
 
-/* Try to open 'path'; if that fails, retry with just the basename. */
+static void vk_build_quake_path(const char *path, char *buffer, size_t buffer_size)
+{
+    const char *normalized = vk_trim_relative_prefix(path);
+    if (buffer == NULL || buffer_size == 0)
+        return;
+
+    if (normalized == NULL || normalized[0] == '\0') {
+        snprintf(buffer, buffer_size, "/data/quake");
+        return;
+    }
+
+    if (normalized[0] == '/') {
+        snprintf(buffer, buffer_size, "%s", normalized);
+        return;
+    }
+
+    snprintf(buffer, buffer_size, "/data/quake/%s", normalized);
+}
+
 static FILE *vk_fopen(const char *path, const char *mode)
 {
     FILE *f = fopen(path, mode);
-    if (f) return f;
-    const char *base = vk_basename(path);
-    if (base != path)
-        f = fopen(base, mode);
-    return f;
+    if (f || path == NULL || path[0] == '/')
+        return f;
+
+    char resolved[256];
+    vk_build_quake_path(path, resolved, sizeof(resolved));
+    return fopen(resolved, mode);
 }
 
 #define MAX_HANDLES 10
@@ -84,7 +102,7 @@ i32 Sys_FileOpenRead(char *path, i32 *hndl)
 i32 Sys_FileOpenWrite(char *path)
 {
     i32 i = findhandle();
-    FILE *f = fopen(path, "wb");
+    FILE *f = vk_fopen(path, "wb");
     if (!f)
         Sys_Error("Error opening %s: %s", path, strerror(errno));
     sys_handles[i] = f;

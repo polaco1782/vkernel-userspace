@@ -351,6 +351,38 @@ auto resolve_path(const std::string& raw, std::string& out) -> bool
     return resolve_path_from(s_cwd, raw, out);
 }
 
+/* Returns true when the user already provided a path instead of a bare command. */
+auto is_explicit_program_path(const std::string& program) -> bool
+{
+    if (program.empty()) {
+        return false;
+    }
+
+    if (is_separator(program[0]) || program[0] == '.') {
+        return true;
+    }
+
+    for (char ch : program) {
+        if (is_separator(ch)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* Resolves bare command names into /bin while preserving explicit paths. */
+auto resolve_program_path(const std::string& raw, std::string& out) -> bool
+{
+    if (is_explicit_program_path(raw)) {
+        return resolve_path(raw, out);
+    }
+
+    out = "/bin/";
+    out += raw;
+    return out.size() + 1 <= kPathMax;
+}
+
 /* Checks whether a path can be listed as a directory. */
 auto directory_exists(const std::string& path) -> bool
 {
@@ -424,7 +456,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
     }
 
     std::string path;
-    if (!resolve_path(program.text, path)) {
+    if (!resolve_program_path(program.text, path)) {
         if (verbose) {
             std::cout << "run: program not found: ";
             std::cout << program.text;

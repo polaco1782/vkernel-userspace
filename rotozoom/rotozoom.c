@@ -304,7 +304,7 @@ int main(int argc, char **argv)
 
     /* Load BMP converted straight to FB-native pixel format */
     texture_t tex;
-    if (!load_bmp("head.bmp", &tex, fb.format))
+    if (!load_bmp("/data/rotozoom/head.bmp", &tex, fb.format))
         return 1;
 
     build_sin_table();

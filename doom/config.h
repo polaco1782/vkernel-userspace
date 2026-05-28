@@ -29,6 +29,6 @@
 #define PROGRAM_PREFIX     "vk-"
 
 /* Doom's IWAD search directory */
-#define DOOMWADDIR         "/"
+#define DOOMWADDIR         "/data/doom"
 
 #endif /* DOOM_CONFIG_H */

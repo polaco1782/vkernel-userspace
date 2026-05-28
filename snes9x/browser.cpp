@@ -91,17 +91,7 @@ void browser_query_default_path(RomBrowserState* browser)
     if (browser == nullptr)
         return;
 
-    memset(browser->response, 0, sizeof(browser->response));
-    vk_kobj_rpc_path_json("get", "fs/root_path", browser->response, sizeof(browser->response));
-
-    char path_buf[kRomBrowserPathMax] = {};
-    if (!vk_kobj_response_ok(browser->response)
-        || !vk_json_extract_string_field(browser->response, "value", path_buf, sizeof(path_buf))
-        || path_buf[0] == '\0') {
-        browser->current_path = "/";
-    } else {
-        browser->current_path = path_buf;
-    }
+    browser->current_path = "/data/snes9x/roms";
 }
 
 bool browser_refresh_listing(AppState* app)

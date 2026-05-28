@@ -162,11 +162,11 @@ int main(int /*argc*/, char** /*argv*/)
 
     if (drop_to_shell) {
         char* const argv[] = {
-            const_cast<char*>("shell.vbin"),
+            const_cast<char*>("/bin/shell.vbin"),
             nullptr,
         };
-        (void)execve("shell.vbin", argv, nullptr);
-        std::cout << "vkgui: failed to exec shell.vbin\n";
+        (void)execve("/bin/shell.vbin", argv, nullptr);
+        std::cout << "vkgui: failed to exec /bin/shell.vbin\n";
         return 1;
     }
 

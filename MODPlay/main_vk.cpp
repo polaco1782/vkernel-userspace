@@ -1402,8 +1402,8 @@ static void play_live(MODFILE *mod, const char *filename, int sample_rate)
 
 int main(int argc, char *argv[])
 {
-    //const char *filename = (argc > 1) ? argv[1] : "UNREALPM.S3M";
-    const char *filename = (argc > 1) ? argv[1] : "makemove.mod";
+    //const char *filename = (argc > 1) ? argv[1] : "/data/modplay/UNREALPM.S3M";
+    const char *filename = (argc > 1) ? argv[1] : "/data/modplay/makemove.mod";
     int sample_rate = DEFAULT_SAMPLE_RATE;
     MODFILE mod;
     FILE *f = fopen(filename, "rb");

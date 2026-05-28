@@ -11,7 +11,7 @@ namespace vkgui {
 
 namespace {
 
-constexpr auto k_plugin_manifest_path = "vkgui_plugins.txt";
+constexpr auto k_plugin_manifest_path = "/data/vkgui/vkgui_plugins.txt";
 
 class DynamicPanelPlugin final : public PanelPlugin {
 public:

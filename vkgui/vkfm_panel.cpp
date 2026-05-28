@@ -57,10 +57,10 @@ auto VkfmPanel::canonicalize_absolute_path(vk::string_view path) const -> std::s
         }
 
         const vk::string_view part = subview(path, start, index - start);
-        if (part.empty() || part.equals(".")) {
+        if (part.empty() || part.compare(".")) {
             continue;
         }
-        if (part.equals("..")) {
+        if (part.compare("..")) {
             if (part_count > 0) {
                 --part_count;
             }
@@ -109,7 +109,7 @@ auto VkfmPanel::resolve_input_path(vk::string_view raw_path) const -> std::strin
 
 auto VkfmPanel::join_path(vk::string_view parent, vk::string_view child) const -> std::string
 {
-    if (parent.empty() || parent.equals("/")) {
+    if (parent.empty() || parent.compare("/")) {
         std::string result("/");
         result.append(child.data(), child.size());
         return result;

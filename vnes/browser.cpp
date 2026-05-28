@@ -51,17 +51,7 @@ void set_path_input(RomBrowserState* browser, const std::string& path)
 
 auto query_default_path() -> std::string
 {
-    char response[256] = {};
-    char value[128] = {};
-
-    vk_kobj_rpc_path_json("get", "fs/root_path", response, sizeof(response));
-    if (vk_kobj_response_ok(response)
-        && vk_json_extract_string_field(response, "value", value, sizeof(value))
-        && value[0] != '\0') {
-        return value;
-    }
-
-    return "/";
+    return "/data/vnes/roms";
 }
 
 auto canonicalize_absolute_path(const std::string& path) -> std::string

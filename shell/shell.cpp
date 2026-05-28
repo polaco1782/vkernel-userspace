@@ -361,9 +361,9 @@ static void run_script_line(const std::string& line)
 /* Streams and executes the optional shell startup script line by line. */
 static void read_startup_script()
 {
-    const vk_file_handle_t fh = VK_CALL(file_open, "shell.txt", "r");
+    const vk_file_handle_t fh = VK_CALL(file_open, "/data/shell/shell.txt", "r");
     if (fh == static_cast<vk_file_handle_t>(0)) {
-        std::cout << "No startup script found (shell.txt), skipping...\n";
+        std::cout << "No startup script found (/data/shell/shell.txt), skipping...\n";
         return;
     }
 

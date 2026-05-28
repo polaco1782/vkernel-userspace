@@ -281,13 +281,9 @@ static void browser_query_default_path(BrowserState* browser) {
     if (browser == nullptr)
         return;
 
-    memset(browser->response, 0, sizeof(browser->response));
-    vk_kobj_rpc_path_json("get", "fs/root_path", browser->response, sizeof(browser->response));
-    if (!vk_kobj_response_ok(browser->response)
-        || !vk_json_extract_string_field(browser->response, "value", browser->current_path, sizeof(browser->current_path))
-        || browser->current_path[0] == '\0') {
-        copy_string(browser->current_path, sizeof(browser->current_path), "/");
-    }
+    copy_string(browser->current_path,
+                sizeof(browser->current_path),
+                "/data/minimp3/tracks");
 }
 
 static bool browser_refresh_listing(AppState* app) {

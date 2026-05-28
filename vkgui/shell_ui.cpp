@@ -255,19 +255,19 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
         default_app_height_ = 200;
     }
 
-    if (settings_store_.open("/vkgui_settings.db")) {
+    if (settings_store_.open("/data/vkgui/vkgui_settings.db")) {
         PersistedSettings settings = current_settings_snapshot();
         if (settings_store_.load(settings)) {
             apply_saved_settings(settings);
             last_saved_settings_ = settings;
             settings_store_ready_ = true;
-            log->add("vkGUI settings: loaded saved settings from /vkgui_settings.db.");
+            log->add("vkGUI settings: loaded saved settings from /data/vkgui/vkgui_settings.db.");
         } else if (log != nullptr) {
-            log->addf("vkGUI settings: failed to load /vkgui_settings.db (%s).",
+            log->addf("vkGUI settings: failed to load /data/vkgui/vkgui_settings.db (%s).",
                       settings_store_.last_error().c_str());
         }
     } else if (log != nullptr) {
-        log->addf("vkGUI settings: failed to open /vkgui_settings.db (%s).",
+        log->addf("vkGUI settings: failed to open /data/vkgui/vkgui_settings.db (%s).",
                   settings_store_.last_error().c_str());
     }
 
@@ -393,7 +393,7 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Drop to Shell")) {
-            request_drop_to_shell(&log, "File > Drop to Shell: replacing vkGUI with shell.vbin.");
+            request_drop_to_shell(&log, "File > Drop to Shell: replacing vkGUI with /bin/shell.vbin.");
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Quit", "Ctrl+Q")) {
@@ -641,12 +641,12 @@ void ShellUi::sync_settings(ConsoleLog& log)
     }
 
     const PersistedSettings current = current_settings_snapshot();
-    if (current.equals(last_saved_settings_)) {
+    if (current.compare(last_saved_settings_)) {
         return;
     }
 
     if (!settings_store_.save(current)) {
-        log.addf("vkGUI settings: failed to save /vkgui_settings.db (%s).",
+        log.addf("vkGUI settings: failed to save /data/vkgui/vkgui_settings.db (%s).",
                  settings_store_.last_error().c_str());
         settings_store_ready_ = false;
         return;

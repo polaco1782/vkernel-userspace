@@ -15,7 +15,7 @@ struct PersistedSettings {
     bool show_kobj = false;
     bool show_vkfm = false;
 
-    [[nodiscard]] auto equals(const PersistedSettings& other) const -> bool
+    [[nodiscard]] auto compare(const PersistedSettings& other) const -> bool
     {
         return style_index == other.style_index
             && font_scale == other.font_scale
