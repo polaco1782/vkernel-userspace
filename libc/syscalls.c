@@ -20,9 +20,12 @@
 #include <_syslist.h>
 
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <reent.h>
+#include <stdarg.h>
 
 #include "../include/vk.h"
 
@@ -175,11 +178,8 @@ int _getpid(void)
  * File I/O
  * ============================================================ */
 
-int _open(const char* path, int flags, int mode)
+int _open(const char* path, int flags, ...)
 {
-    (void)flags;
-    (void)mode;
-
     if (!path) {
         errno = EFAULT;
         return -1;
@@ -191,14 +191,24 @@ int _open(const char* path, int flags, int mode)
      * We map conservatively; the kernel side is simple enough.
      */
     const char* vk_mode = "r";
+    const int accmode = flags & O_ACCMODE;
+    const int wants_create = (flags & O_CREAT) != 0;
+    const int wants_truncate = (flags & O_TRUNC) != 0;
+    const int wants_append = (flags & O_APPEND) != 0;
 
-    /* O_WRONLY or O_RDWR */
-    int accmode = flags & 3;  /* O_ACCMODE */
-    if (accmode == 1)      vk_mode = "w";
-    else if (accmode == 2) vk_mode = "r+";
-
-    /* O_APPEND (0x0400 on Linux, 0x0008 on newlib) — try both bits */
-    if (flags & 0x0008 || flags & 0x0400) vk_mode = "a";
+    if (wants_append) {
+        vk_mode = accmode == O_RDWR ? "a+" : "a";
+    } else if (wants_truncate) {
+        vk_mode = accmode == O_RDWR ? "w+" : "w";
+    } else if (wants_create && accmode == O_RDWR) {
+        /* SQLite opens databases as O_RDWR|O_CREAT but only wants a truncate
+           on first creation. Preserve existing contents when the file exists. */
+        vk_mode = VK_CALL(file_exists, path) ? "r+" : "w+";
+    } else if (accmode == O_WRONLY) {
+        vk_mode = "w";
+    } else if (accmode == O_RDWR) {
+        vk_mode = "r+";
+    }
 
     vk_file_handle_t h = VK_CALL(file_open, path, vk_mode);
     if (h == 0) {
@@ -371,7 +381,6 @@ int _isatty(int fd)
  * Time (stub — no RTC yet)
  * ============================================================ */
 
-#include <sys/time.h>
 #include <sys/times.h>
 
 int _gettimeofday(struct timeval* tv, void* tz)
@@ -396,6 +405,184 @@ clock_t _times(struct tms* buf)
         buf->tms_cstime = 0;
     }
     return (clock_t)ticks;
+}
+
+int access(const char* path, int mode)
+{
+    (void)mode;
+
+    struct stat st = {0};
+    if (stat(path, &st) == 0) {
+        return 0;
+    }
+
+    errno = ENOENT;
+    return -1;
+}
+
+int fsync(int fd)
+{
+    if (fd < 0) {
+        errno = EBADF;
+        return -1;
+    }
+
+    /* The kernel file API is synchronous today, so there is nothing extra to flush. */
+    return 0;
+}
+
+int ftruncate(int fd, off_t length)
+{
+    (void)fd;
+    (void)length;
+
+    /* The current file ABI has no truncate primitive yet. */
+    return 0;
+}
+
+int fchmod(int fd, mode_t mode)
+{
+    (void)fd;
+    (void)mode;
+    return 0;
+}
+
+int fchown(int fd, uid_t owner, gid_t group)
+{
+    (void)fd;
+    (void)owner;
+    (void)group;
+    return 0;
+}
+
+int mkdir(const char* path, mode_t mode)
+{
+    (void)path;
+    (void)mode;
+    errno = ENOSYS;
+    return -1;
+}
+
+int rmdir(const char* path)
+{
+    (void)path;
+    errno = ENOSYS;
+    return -1;
+}
+
+uid_t geteuid(void)
+{
+    return 0;
+}
+
+char* getcwd(char* buf, size_t size)
+{
+    if (buf == 0 || size < 2) {
+        errno = ERANGE;
+        return 0;
+    }
+
+    buf[0] = '/';
+    buf[1] = '\0';
+    return buf;
+}
+
+ssize_t pread(int fd, void* buf, size_t nbytes, off_t offset)
+{
+    const int original = lseek(fd, 0, 1);
+    if (original < 0) {
+        return -1;
+    }
+    if (lseek(fd, (int)offset, 0) < 0) {
+        return -1;
+    }
+
+    const int read_count = read(fd, buf, (int)nbytes);
+    (void)lseek(fd, original, 0);
+    return read_count;
+}
+
+ssize_t pwrite(int fd, const void* buf, size_t nbytes, off_t offset)
+{
+    const int original = lseek(fd, 0, 1);
+    if (original < 0) {
+        return -1;
+    }
+    if (lseek(fd, (int)offset, 0) < 0) {
+        return -1;
+    }
+
+    const int write_count = write(fd, buf, (int)nbytes);
+    (void)lseek(fd, original, 0);
+    return write_count;
+}
+
+int fcntl(int fd, int cmd, ...)
+{
+    (void)fd;
+
+    va_list args;
+    va_start(args, cmd);
+
+    if (cmd == F_GETLK) {
+        struct flock* lock = va_arg(args, struct flock*);
+        if (lock != 0) {
+            lock->l_type = F_UNLCK;
+        }
+        va_end(args);
+        return 0;
+    }
+
+    va_end(args);
+
+    if (cmd == F_GETFL) {
+        return O_RDWR;
+    }
+
+    return 0;
+}
+
+ssize_t readlink(const char* path, char* buf, size_t bufsize)
+{
+    (void)path;
+    (void)buf;
+    (void)bufsize;
+    errno = EINVAL;
+    return -1;
+}
+
+unsigned sleep(unsigned seconds)
+{
+    if (seconds == 0 || vk_get_api()->vk_sleep == 0 || vk_get_api()->vk_ticks_per_sec == 0) {
+        return 0;
+    }
+
+    const vk_u64 ticks = (vk_u64)seconds * vk_get_api()->vk_ticks_per_sec();
+    vk_get_api()->vk_sleep(ticks);
+    return 0;
+}
+
+int usleep(useconds_t usec)
+{
+    if (usec == 0 || vk_get_api()->vk_sleep == 0 || vk_get_api()->vk_ticks_per_sec == 0) {
+        return 0;
+    }
+
+    const vk_u64 ticks_per_second = vk_get_api()->vk_ticks_per_sec();
+    vk_u64 ticks = ((vk_u64)usec * ticks_per_second + 999999ULL) / 1000000ULL;
+    if (ticks == 0) {
+        ticks = 1;
+    }
+
+    vk_get_api()->vk_sleep(ticks);
+    return 0;
+}
+
+int utimes(const char* path, const struct timeval times[2])
+{
+    (void)path;
+    (void)times;
+    return 0;
 }
 
 /* ============================================================
