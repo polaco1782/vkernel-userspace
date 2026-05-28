@@ -60,6 +60,16 @@ void blit_scaled_image(AppState* app,
     }
 }
 
+void redraw_present_buffer(AppState* app, vk_u32 width, vk_u32 height)
+{
+    if (app == nullptr || width == 0 || height == 0) {
+        return;
+    }
+
+    app->present_buffer.assign(app->present_buffer.size(), 0u);
+    blit_scaled_image(app, app->converted_frame.data(), width, height, width);
+}
+
 bool refresh_framebuffer_state(AppState* app, bool* changed)
 {
     if (app == nullptr)
@@ -492,13 +502,15 @@ bool8 S9xDeinitUpdate(int width, int height)
 {
     using namespace snes9x_frontend;
 
-    if (g_app == nullptr || !refresh_framebuffer(g_app))
+    if (g_app == nullptr)
         return TRUE;
 
     if (width <= 0 || height <= 0)
         return TRUE;
 
-    g_app->present_buffer.assign(g_app->present_buffer.size(), 0u);
+    if (!refresh_framebuffer(g_app))
+        return TRUE;
+
     g_app->converted_frame.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
 
     const uint16* screen = GFX.Screen;
@@ -510,14 +522,30 @@ bool8 S9xDeinitUpdate(int width, int height)
             dest_row[x] = rgb565_to_pixel(source_row[x], g_app->framebuffer.format);
     }
 
-    blit_scaled_image(g_app,
-                      g_app->converted_frame.data(),
-                      static_cast<vk_u32>(width),
-                      static_cast<vk_u32>(height),
-                      static_cast<vk_u32>(width));
-    memcpy(reinterpret_cast<void*>(static_cast<uintptr_t>(g_app->framebuffer.base)),
-           g_app->present_buffer.data(),
-           g_app->present_buffer.size() * sizeof(vk_u32));
+    const vk_u32 frame_width = static_cast<vk_u32>(width);
+    const vk_u32 frame_height = static_cast<vk_u32>(height);
+
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        bool framebuffer_changed = false;
+        if (!refresh_framebuffer(g_app, &framebuffer_changed)) {
+            return TRUE;
+        }
+
+        redraw_present_buffer(g_app, frame_width, frame_height);
+
+        if (!refresh_framebuffer(g_app, &framebuffer_changed)) {
+            return TRUE;
+        }
+        if (framebuffer_changed) {
+            continue;
+        }
+
+        memcpy(reinterpret_cast<void*>(static_cast<uintptr_t>(g_app->framebuffer.base)),
+               g_app->present_buffer.data(),
+               g_app->present_buffer.size() * sizeof(vk_u32));
+        return TRUE;
+    }
+
     return TRUE;
 }
 

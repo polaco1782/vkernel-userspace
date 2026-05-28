@@ -95,8 +95,3 @@ bool8 S9xDoScreenshot(int, int)
     Settings.TakeScreenshot = FALSE;
     return FALSE;
 }
-
-extern "C" int ftruncate(int, long)
-{
-    return -1;
-}

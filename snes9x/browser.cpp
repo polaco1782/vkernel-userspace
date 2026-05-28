@@ -612,8 +612,10 @@ bool browse_and_load_rom(AppState* app)
             }
         }
 
-        if (!saw_input)
-            VK_CALL(yield);
+        if (!saw_input) {
+            /* Block briefly so vgui can remap the shared framebuffer safely. */
+            VK_CALL(sleep, 1);
+        }
     }
 
     return false;
