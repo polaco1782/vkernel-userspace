@@ -67,7 +67,7 @@ int main(int /*argc*/, char** /*argv*/)
             log,
         };
 
-        ui.initialize(framebuffer);
+        ui.initialize(framebuffer, &log);
 
         /* Performance tuning for the software rasterizer. */
         ImGuiStyle& style = ImGui::GetStyle();

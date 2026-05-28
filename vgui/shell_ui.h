@@ -1,6 +1,7 @@
 #ifndef VGUI_SHELL_UI_H
 #define VGUI_SHELL_UI_H
 
+#include "settings_store.h"
 #include "vgui_common.h"
 
 namespace vgui {
@@ -15,7 +16,7 @@ class WindowManager;
 
 class ShellUi {
 public:
-    void initialize(const vk_framebuffer_info_t& framebuffer);
+    void initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* log = nullptr);
 
     [[nodiscard]] auto running() const -> bool { return running_; }
     [[nodiscard]] auto drop_to_shell_requested() const -> bool { return drop_to_shell_requested_; }
@@ -30,11 +31,14 @@ public:
               VkfmPanel& vkfm_panel);
 
 private:
+    [[nodiscard]] auto current_settings_snapshot() const -> PersistedSettings;
     void apply_style();
+    void apply_saved_settings(const PersistedSettings& settings);
     void draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_registry);
     void draw_info_window(const vk_framebuffer_info_t& framebuffer, WindowManager& window_manager, ConsoleLog& log);
     void draw_settings_window(WindowManager& window_manager, ConsoleLog& log);
     void draw_about_modal();
+    void sync_settings(ConsoleLog& log);
 
     bool running_ = true;
     bool drop_to_shell_requested_ = false;
@@ -56,6 +60,10 @@ private:
     int style_index_ = 0;
     float font_scale_ = 1.0f;
     bool transparency_ = false;
+
+    SettingsStore settings_store_;
+    PersistedSettings last_saved_settings_ {};
+    bool settings_store_ready_ = false;
 };
 
 } // namespace vgui

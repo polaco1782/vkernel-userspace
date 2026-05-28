@@ -244,7 +244,7 @@ void apply_scheme_win9x()
 
 }
 
-void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer)
+void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* log)
 {
     default_app_width_ = framebuffer.width / 2;
     default_app_height_ = framebuffer.height / 2;
@@ -253,6 +253,22 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer)
     }
     if (default_app_height_ < 200) {
         default_app_height_ = 200;
+    }
+
+    if (settings_store_.open("/vgui_settings.db")) {
+        PersistedSettings settings = current_settings_snapshot();
+        if (settings_store_.load(settings)) {
+            apply_saved_settings(settings);
+            last_saved_settings_ = settings;
+            settings_store_ready_ = true;
+            log->add("vGUI settings: loaded saved settings from /vgui_settings.db.");
+        } else if (log != nullptr) {
+            log->addf("vGUI settings: failed to load /vgui_settings.db (%s).",
+                      settings_store_.last_error().c_str());
+        }
+    } else if (log != nullptr) {
+        log->addf("vGUI settings: failed to open /vgui_settings.db (%s).",
+                  settings_store_.last_error().c_str());
     }
 
     ImGui_ImplVK_SetTransparencyEnabled(transparency_);
@@ -284,6 +300,42 @@ void ShellUi::reset_counter(ConsoleLog* log, vk::string_view message)
     if (log != nullptr && !message.empty()) {
         log->add(message);
     }
+}
+
+auto ShellUi::current_settings_snapshot() const -> PersistedSettings
+{
+    PersistedSettings settings;
+    settings.style_index = style_index_;
+    settings.font_scale = font_scale_;
+    settings.transparency = transparency_;
+    settings.show_info = show_info_;
+    settings.show_console = show_console_;
+    settings.show_task_manager = show_task_manager_;
+    settings.show_kobj = show_kobj_;
+    settings.show_vkfm = show_vkfm_;
+    return settings;
+}
+
+void ShellUi::apply_saved_settings(const PersistedSettings& settings)
+{
+    style_index_ = settings.style_index;
+    if (style_index_ < 0 || style_index_ > 6) {
+        style_index_ = 0;
+    }
+
+    font_scale_ = settings.font_scale;
+    if (font_scale_ < 0.5f) {
+        font_scale_ = 0.5f;
+    } else if (font_scale_ > 2.0f) {
+        font_scale_ = 2.0f;
+    }
+
+    transparency_ = settings.transparency;
+    show_info_ = settings.show_info;
+    show_console_ = settings.show_console;
+    show_task_manager_ = settings.show_task_manager;
+    show_kobj_ = settings.show_kobj;
+    show_vkfm_ = settings.show_vkfm;
 }
 
 void ShellUi::apply_style()
@@ -582,6 +634,27 @@ void ShellUi::draw_about_modal()
     }
 }
 
+void ShellUi::sync_settings(ConsoleLog& log)
+{
+    if (!settings_store_ready_) {
+        return;
+    }
+
+    const PersistedSettings current = current_settings_snapshot();
+    if (current.equals(last_saved_settings_)) {
+        return;
+    }
+
+    if (!settings_store_.save(current)) {
+        log.addf("vGUI settings: failed to save /vgui_settings.db (%s).",
+                 settings_store_.last_error().c_str());
+        settings_store_ready_ = false;
+        return;
+    }
+
+    last_saved_settings_ = current;
+}
+
 void ShellUi::draw(PluginHost& plugin_host,
                    PanelRegistry& panel_registry,
                    TaskManagerPanel& task_manager,
@@ -598,6 +671,7 @@ void ShellUi::draw(PluginHost& plugin_host,
     plugin_host.window_manager.draw_windows();
     draw_settings_window(plugin_host.window_manager, plugin_host.log);
     draw_about_modal();
+    sync_settings(plugin_host.log);
 
     if (show_demo_) {
         ImGui::ShowDemoWindow(&show_demo_);

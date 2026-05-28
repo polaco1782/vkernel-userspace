@@ -13,6 +13,7 @@
 #              make DEBUG=1  (debug, keeps symbols and -Og)
 
 CXX     ?= g++
+CC      ?= gcc
 AR      ?= ar
 STRIP   ?= strip
 
@@ -25,6 +26,7 @@ CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
 IMGUI_DIR       := ./imgui
 IMPLOT_DIR      := ./implot
+SQLITE_DIR      := ./deps/sqlite3
 PLUGIN_DIR      := ./plugins
 RUNTIME_PLUGIN_DIR := ./runtime_plugins
 
@@ -54,6 +56,7 @@ CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
 CXXFLAGS  += -I$(IMGUI_DIR)
 CXXFLAGS  += -I$(IMPLOT_DIR)
+CXXFLAGS  += -I$(SQLITE_DIR)
 CXXFLAGS  += -I.
 # Tell every TU (including ImGui) to pick up our config header
 CXXFLAGS  += -DIMGUI_USER_CONFIG=\"imgui_config.h\"
@@ -71,6 +74,35 @@ IMGUI_CXXFLAGS  += -DIMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS
 # ImPlot is another third-party Dear ImGui extension; build it with the
 # same relaxed warning profile we use for vendored ImGui sources.
 IMPLOT_CXXFLAGS := $(IMGUI_CXXFLAGS)
+
+SQLITE_CFLAGS := -std=c11
+SQLITE_CFLAGS += -ffreestanding
+SQLITE_CFLAGS += -fno-builtin
+SQLITE_CFLAGS += -fno-stack-protector
+SQLITE_CFLAGS += -fpie
+SQLITE_CFLAGS += -m64
+SQLITE_CFLAGS += -mno-red-zone
+ifdef DEBUG
+SQLITE_CFLAGS += -Og -g3 -fno-omit-frame-pointer -DDEBUG
+else
+SQLITE_CFLAGS += -O2 -DNDEBUG
+endif
+SQLITE_CFLAGS += -Wall -Wextra
+SQLITE_CFLAGS += -Wno-unused-parameter
+SQLITE_CFLAGS += -Wno-unused-function
+SQLITE_CFLAGS += -isystem $(SYSROOT)/include
+SQLITE_CFLAGS += -I$(USER_INCLUDE)
+SQLITE_CFLAGS += -I$(KERNEL_INCLUDE)
+SQLITE_CFLAGS += -I$(SQLITE_DIR)
+SQLITE_CFLAGS += -DSQLITE_ENABLE_COLUMN_METADATA=1
+SQLITE_CFLAGS += -DSQLITE_THREADSAFE=0
+SQLITE_CFLAGS += -DSQLITE_OMIT_LOAD_EXTENSION=1
+SQLITE_CFLAGS += -DSQLITE_OMIT_WAL=1
+SQLITE_CFLAGS += -DSQLITE_MAX_MMAP_SIZE=0
+SQLITE_CFLAGS += -DSQLITE_TEMP_STORE=3
+SQLITE_CFLAGS += -DHAVE_NANOSLEEP=0
+SQLITE_CFLAGS += -DHAVE_USLEEP=1
+SQLITE_CFLAGS += -Dlstat=stat
 
 # ---- Linker flags -------------------------------------------------------
 
@@ -118,6 +150,10 @@ IMPLOT_SRCS :=                         \
 IMPLOT_OBJS := $(IMPLOT_SRCS:.cpp=.o)
 IMPLOT_DEPS := $(IMPLOT_OBJS:.o=.d)
 
+SQLITE_SRCS := $(SQLITE_DIR)/sqlite3.c
+SQLITE_OBJS := $(SQLITE_SRCS:.c=.o)
+SQLITE_DEPS := $(SQLITE_OBJS:.o=.d)
+
 PLUGIN_SRCS := $(sort $(wildcard $(PLUGIN_DIR)/*.cpp))
 
 OUR_SRCS   := console_log.cpp        \
@@ -127,7 +163,9 @@ OUR_SRCS   := console_log.cpp        \
 			  launch_registry.cpp    \
 			  main.cpp               \
 			  plugin_registry.cpp    \
+			  settings_store.cpp     \
 			  shell_ui.cpp           \
+			  sqlite_db.cpp          \
 			  task_manager_panel.cpp \
 			  vkfm_panel.cpp         \
 			  window_manager.cpp     \
@@ -135,8 +173,8 @@ OUR_SRCS   := console_log.cpp        \
 OUR_OBJS   := $(OUR_SRCS:.cpp=.o)
 OUR_DEPS   := $(OUR_OBJS:.o=.d)
 
-ALL_OBJS   := $(IMGUI_OBJS) $(IMPLOT_OBJS) $(OUR_OBJS)
-ALL_DEPS   := $(IMGUI_DEPS) $(IMPLOT_DEPS) $(OUR_DEPS)
+ALL_OBJS   := $(IMGUI_OBJS) $(IMPLOT_OBJS) $(SQLITE_OBJS) $(OUR_OBJS)
+ALL_DEPS   := $(IMGUI_DEPS) $(IMPLOT_DEPS) $(SQLITE_DEPS) $(OUR_DEPS)
 
 TARGET     := vgui.vbin
 
@@ -191,6 +229,10 @@ $(IMGUI_DIR)/%.o: $(IMGUI_DIR)/%.cpp
 $(IMPLOT_DIR)/%.o: $(IMPLOT_DIR)/%.cpp
 	@echo "  CXX [implot] $(<F)"
 	@$(CXX) $(IMPLOT_CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
+
+$(SQLITE_DIR)/%.o: $(SQLITE_DIR)/%.c
+	@echo "  CC  [sqlite] $(<F)"
+	@$(CC) $(SQLITE_CFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
 
 %.o: %.cpp
 	@echo "  CXX         $<"

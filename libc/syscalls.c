@@ -45,6 +45,7 @@
 
 typedef struct {
     vk_file_handle_t handle;
+    vk_u64           inode;
     int              in_use;
 } vk_fd_entry_t;
 
@@ -59,6 +60,7 @@ static int _fd_alloc(vk_file_handle_t h)
     for (int i = 3; i < VK_MAX_FDS; ++i) {
         if (!_fd_table[i].in_use) {
             _fd_table[i].handle = h;
+            _fd_table[i].inode = 0;
             _fd_table[i].in_use = 1;
             return i;
         }
@@ -71,12 +73,59 @@ static void _fd_free(int fd)
     if (fd >= 3 && fd < VK_MAX_FDS) {
         _fd_table[fd].in_use = 0;
         _fd_table[fd].handle = 0;
+        _fd_table[fd].inode = 0;
     }
 }
 
 static int _fd_valid(int fd)
 {
     return fd >= 0 && fd < VK_MAX_FDS && _fd_table[fd].in_use;
+}
+
+static vk_u64 _path_inode(const char* path)
+{
+    const unsigned char* cur = (const unsigned char*)path;
+    vk_u64 hash = 1469598103934665603ull;
+
+    if (!cur) {
+        return 1;
+    }
+
+    while (*cur != '\0') {
+        hash ^= (vk_u64)(*cur++);
+        hash *= 1099511628211ull;
+    }
+
+    return hash != 0 ? hash : 1;
+}
+
+static int _fd_size(int fd, off_t* out_size)
+{
+    if (!_fd_valid(fd) || out_size == 0) {
+        errno = out_size == 0 ? EFAULT : EBADF;
+        return -1;
+    }
+
+    const vk_file_handle_t handle = _fd_table[fd].handle;
+    const vk_i64 original = VK_CALL(file_tell, handle);
+    if (original < 0) {
+        errno = EIO;
+        return -1;
+    }
+    if (VK_CALL(file_seek, handle, 0, 2) != 0) {
+        errno = EIO;
+        return -1;
+    }
+
+    const vk_i64 end = VK_CALL(file_tell, handle);
+    const int restore_rc = VK_CALL(file_seek, handle, original, 0);
+    if (end < 0 || restore_rc != 0) {
+        errno = EIO;
+        return -1;
+    }
+
+    *out_size = (off_t)end;
+    return 0;
 }
 
 /* ============================================================
@@ -223,6 +272,8 @@ int _open(const char* path, int flags, ...)
         return -1;
     }
 
+    _fd_table[fd].inode = _path_inode(path);
+
     return fd;
 }
 
@@ -330,8 +381,15 @@ int _fstat(int fd, struct stat* st)
         return -1;
     }
 
-    /* We don't have real stat info — report a regular file. */
-    st->st_mode = S_IFREG;
+    if (_fd_size(fd, &st->st_size) != 0) {
+        return -1;
+    }
+
+    st->st_mode = S_IFREG | 0666;
+    st->st_nlink = 1;
+    st->st_blksize = 512;
+    st->st_dev = 1;
+    st->st_ino = (ino_t)_fd_table[fd].inode;
     return 0;
 }
 
@@ -345,8 +403,12 @@ int _stat(const char* path, struct stat* st)
     *st = (struct stat){0};
 
     if (VK_CALL(file_exists, path)) {
-        st->st_mode = S_IFREG;
+        st->st_mode = S_IFREG | 0666;
         st->st_size = (off_t)VK_CALL(file_size, path);
+        st->st_nlink = 1;
+        st->st_blksize = 512;
+        st->st_dev = 1;
+        st->st_ino = (ino_t)_path_inode(path);
         return 0;
     }
 
@@ -433,10 +495,19 @@ int fsync(int fd)
 
 int ftruncate(int fd, off_t length)
 {
-    (void)fd;
-    (void)length;
+    if (!_fd_valid(fd)) {
+        errno = EBADF;
+        return -1;
+    }
+    if (length < 0) {
+        errno = EINVAL;
+        return -1;
+    }
 
-    /* The current file ABI has no truncate primitive yet. */
+    if (VK_CALL(file_truncate, _fd_table[fd].handle, (vk_i64)length) != 0) {
+        errno = EIO;
+        return -1;
+    }
     return 0;
 }
 

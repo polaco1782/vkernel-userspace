@@ -18,6 +18,35 @@ constexpr vk_u32 k_min_app_height = 240;
 constexpr float k_window_chrome_width = 40.0f;
 constexpr float k_window_chrome_height = 80.0f;
 
+auto query_app_task(vk_i64 task_id, vk_task_info_t* out = nullptr) -> bool
+{
+    if (task_id < 0) {
+        if (out != nullptr) {
+            *out = {};
+        }
+        return false;
+    }
+
+    std::array<vk_task_info_t, 64> tasks {};
+    const vk_usize total = VK_CALL(task_snapshot, tasks.data(), tasks.size());
+    const vk_usize count = total < tasks.size() ? total : tasks.size();
+    for (vk_usize index = 0; index < count; ++index) {
+        if (static_cast<vk_i64>(tasks[index].id) != task_id) {
+            continue;
+        }
+
+        if (out != nullptr) {
+            *out = tasks[index];
+        }
+        return true;
+    }
+
+    if (out != nullptr) {
+        *out = {};
+    }
+    return false;
+}
+
 } // namespace
 
 void FramebufferDeleter::operator()(vk_u32* ptr) const noexcept
@@ -64,20 +93,8 @@ void FramebufferSurface::zero() noexcept
 
 auto WindowManager::app_task_running(vk_i64 task_id) -> bool
 {
-    if (task_id < 0) {
-        return false;
-    }
-
-    std::array<vk_task_info_t, 64> tasks {};
-    const vk_usize total = VK_CALL(task_snapshot, tasks.data(), tasks.size());
-    const vk_usize count = total < tasks.size() ? total : tasks.size();
-    for (vk_usize index = 0; index < count; ++index) {
-        if (static_cast<vk_i64>(tasks[index].id) == task_id) {
-            return tasks[index].state != 3u;
-        }
-    }
-
-    return false;
+    vk_task_info_t task = {};
+    return query_app_task(task_id, &task) && task.state != 3u;
 }
 
 auto WindowManager::app_accepts_framebuffer_resize(vk_i64 task_id) -> bool
@@ -219,6 +236,16 @@ auto WindowManager::resize_app_framebuffer(AppWindow& app, vk_u32 width, vk_u32 
 
     if (app.width == width && app.height == height) {
         return true;
+    }
+
+    vk_task_info_t task = {};
+    if (!query_app_task(app.task_id, &task) || task.state == 3u) {
+        return false;
+    }
+
+    /* Retry once the app yields so we do not swap its shared mapping mid-blit. */
+    if (task.state == 1u) {
+        return false;
     }
 
     FramebufferSurface pixels;
