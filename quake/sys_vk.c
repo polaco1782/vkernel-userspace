@@ -291,14 +291,10 @@ void Sys_SendKeyEvents(void)
     build_key_table();
 
     vk_framebuffer_event_t fb_event = {};
-    qboolean have_fb_event = false;
     while (VK_CALL(poll_framebuffer_event, &fb_event)) {
-        have_fb_event = true;
+        (void)fb_event;
     }
-    if (have_fb_event && fb_event.type == VK_FRAMEBUFFER_EVENT_RESIZED) {
-        VID_NotifyFramebufferResize((i32)fb_event.framebuffer.width,
-                                    (i32)fb_event.framebuffer.height);
-    }
+    VID_CheckFramebufferState();
 
     /* keyboard events */
     vk_key_event_t kev;

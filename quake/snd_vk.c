@@ -23,10 +23,14 @@
 /* VK mix channel we use as the audio stream */
 #define STREAM_CHANNEL (VK_SND_MIX_CHANNELS - 1)
 
-/* Saved state for DMA position tracking */
-static vk_u64 last_submit_tick = 0;
-static int    last_submit_frames = 0;
-static int    last_submit_samplepos = 0;
+/* Keep Quake's DMA read cursor separate from the next ring region we queue. */
+#define STREAM_CHUNK_FRAMES   2048
+#define STREAM_TARGET_FRAMES  (STREAM_CHUNK_FRAMES * 2)
+
+static vk_u64 playback_tick = 0;
+static vk_u64 playback_residual = 0;
+static int    played_frame_cursor = 0;
+static int    queued_frame_cursor = 0;
 
 /* ---------------------------------------------------------------
  * Helpers
@@ -41,6 +45,85 @@ static int round_up_pow2(int n)
     return n + 1;
 }
 
+static int ring_buffer_frames(void)
+{
+    if (!shm || shm->channels <= 0)
+        return 0;
+
+    return shm->samples / shm->channels;
+}
+
+static int bytes_per_frame(void)
+{
+    if (!shm || shm->samplebits <= 0)
+        return 0;
+
+    return shm->channels * (shm->samplebits / 8);
+}
+
+static void sync_samplepos(void)
+{
+    int frames = ring_buffer_frames();
+
+    if (!shm || frames <= 0)
+        return;
+
+    shm->samplepos = (played_frame_cursor & (frames - 1)) * shm->channels;
+}
+
+static void reset_playback_clock(void)
+{
+    playback_tick = VK_CALL(tick_count);
+    playback_residual = 0;
+}
+
+static void update_playback_cursor(void)
+{
+    if (!shm)
+        return;
+
+    int buffered_frames = queued_frame_cursor - played_frame_cursor;
+    if (buffered_frames < 0) {
+        played_frame_cursor = queued_frame_cursor;
+        buffered_frames = 0;
+        playback_residual = 0;
+    }
+
+    vk_u64 now = VK_CALL(tick_count);
+    if (playback_tick == 0)
+        playback_tick = now;
+
+    if (buffered_frames == 0) {
+        playback_tick = now;
+        playback_residual = 0;
+        sync_samplepos();
+        return;
+    }
+
+    if (!VK_CALL(snd_mix_is_playing, STREAM_CHANNEL)) {
+        played_frame_cursor = queued_frame_cursor;
+        playback_tick = now;
+        playback_residual = 0;
+        sync_samplepos();
+        return;
+    }
+
+    playback_residual += (now - playback_tick) * (vk_u64)shm->speed;
+    playback_tick = now;
+
+    vk_u32 ticks_per_second = VK_CALL(ticks_per_sec);
+    int elapsed_frames = (int)(playback_residual / ticks_per_second);
+    playback_residual %= ticks_per_second;
+
+    if (elapsed_frames > buffered_frames) {
+        elapsed_frames = buffered_frames;
+        playback_residual = 0;
+    }
+
+    played_frame_cursor += elapsed_frames;
+    sync_samplepos();
+}
+
 /* ---------------------------------------------------------------
  * SNDDMA interface
  * --------------------------------------------------------------- */
@@ -48,7 +131,7 @@ static int round_up_pow2(int n)
 qboolean SNDDMA_Init(dma_t *dma)
 {
     shm = dma;
-    memset(shm, 0, sizeof(*shm));
+    memset((void *)shm, 0, sizeof(*shm));
 
     shm->samplebits = 16;
     shm->signed8    = 0;
@@ -70,31 +153,21 @@ qboolean SNDDMA_Init(dma_t *dma)
         return false;
     }
 
-    last_submit_tick     = 0;
-    last_submit_frames   = 0;
-    last_submit_samplepos = 0;
+    played_frame_cursor = 0;
+    queued_frame_cursor = 0;
+    sync_samplepos();
+    reset_playback_clock();
 
     return true;
 }
 
 int SNDDMA_GetDMAPos(void)
 {
-    if (!shm) return 0;
-    if (!last_submit_frames)
-        return shm->samplepos;
+    if (!shm)
+        return 0;
 
-    vk_u64 now = VK_CALL(tick_count);
-    vk_u32 tps = VK_CALL(ticks_per_sec);
-
-    /* How many frames have been consumed since last submit */
-    vk_u64 elapsed = now - last_submit_tick;
-    int played_frames = (int)((elapsed * (vk_u64)shm->speed) / tps);
-    if (played_frames > last_submit_frames)
-        played_frames = last_submit_frames;
-
-    int pos = (last_submit_samplepos
-               + played_frames * shm->channels) % shm->samples;
-    return pos;
+    update_playback_cursor();
+    return shm->samplepos;
 }
 
 void SNDDMA_Shutdown(void)
@@ -105,6 +178,10 @@ void SNDDMA_Shutdown(void)
         free(shm->buffer);
         shm->buffer = NULL;
     }
+    played_frame_cursor = 0;
+    queued_frame_cursor = 0;
+    playback_tick = 0;
+    playback_residual = 0;
     shm = NULL;
 }
 
@@ -114,43 +191,48 @@ void SNDDMA_BlockSound(void)   {}
 
 void SNDDMA_Submit(void)
 {
-    if (!shm || !shm->buffer) return;
-
-    /* Submit ~100ms worth of frames per call */
-    int chunk_frames = shm->speed / 10; /* 4410 frames */
-    if (chunk_frames < 512)  chunk_frames = 512;
-    if (chunk_frames > shm->samples / shm->channels)
-        chunk_frames = shm->samples / shm->channels / 2;
-
-    /* Current byte position in ring buffer */
-    int byte_pos = (shm->samplepos / shm->channels)
-                   * shm->channels * (shm->samplebits / 8);
-    int ring_bytes = shm->samples * (shm->samplebits / 8);
-    byte_pos = byte_pos % ring_bytes;
-
-    /* Make sure we don't submit data that wraps around in a single call */
-    int avail_bytes = ring_bytes - byte_pos;
-    int want_bytes  = chunk_frames * shm->channels * (shm->samplebits / 8);
-    if (want_bytes > avail_bytes)
-        want_bytes = avail_bytes;
-    chunk_frames = want_bytes / (shm->channels * (shm->samplebits / 8));
-    if (chunk_frames == 0)
-        chunk_frames = 1;
-
-    if (!VK_CALL(snd_mix_queue_play,
-                 STREAM_CHANNEL,
-                 shm->buffer + byte_pos,
-                 chunk_frames,
-                 VK_SND_FORMAT_SIGNED_16_STEREO,
-                 (vk_u32)shm->speed,
-                 255, 255)) {
+    if (!shm || !shm->buffer)
         return;
+
+    update_playback_cursor();
+
+    if (queued_frame_cursor < played_frame_cursor)
+        queued_frame_cursor = played_frame_cursor;
+
+    const int fullsamples = ring_buffer_frames();
+    const int frame_bytes = bytes_per_frame();
+    if (fullsamples <= 0 || frame_bytes <= 0)
+        return;
+
+    while ((queued_frame_cursor - played_frame_cursor) < STREAM_TARGET_FRAMES) {
+        int available_frames = paintedtime - queued_frame_cursor;
+        if (available_frames <= 0)
+            break;
+
+        int chunk_frames = STREAM_CHUNK_FRAMES;
+        if (chunk_frames > available_frames)
+            chunk_frames = available_frames;
+
+        int ring_frame = queued_frame_cursor & (fullsamples - 1);
+        int frames_to_end = fullsamples - ring_frame;
+        if (chunk_frames > frames_to_end)
+            chunk_frames = frames_to_end;
+        if (chunk_frames <= 0)
+            break;
+
+        const byte* chunk = shm->buffer + ring_frame * frame_bytes;
+        if (!VK_CALL(snd_mix_queue_play,
+                     STREAM_CHANNEL,
+                     chunk,
+                     chunk_frames,
+                     VK_SND_FORMAT_SIGNED_16_STEREO,
+                     (vk_u32)shm->speed,
+                     255, 255)) {
+            break;
+        }
+
+        queued_frame_cursor += chunk_frames;
+        if (playback_tick == 0)
+            reset_playback_clock();
     }
-
-    last_submit_tick      = VK_CALL(tick_count);
-    last_submit_frames    = chunk_frames;
-    last_submit_samplepos = shm->samplepos;
-
-    shm->samplepos = (shm->samplepos
-                      + chunk_frames * shm->channels) % shm->samples;
 }

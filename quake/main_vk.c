@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
     const uint64_t min_frame_ticks =
         ticks_per_second > 72 ? (ticks_per_second / 72) : 1;
     uint64_t last_frame_tick = VK_CALL(tick_count);
+    uint64_t last_short_wait_tick = 0;
 
     printf("Chocolate Quake " PACKAGE_VERSION " - vkernel build\n");
 
@@ -38,13 +39,21 @@ int main(int argc, char *argv[])
 
         if (host_framecount != previous_framecount) {
             last_frame_tick = VK_CALL(tick_count);
+            last_short_wait_tick = 0;
+            /* Let vkgui remap the shared framebuffer between rendered frames. */
+            VK_CALL(yield);
         } else {
             uint64_t now_tick = VK_CALL(tick_count);
             uint64_t next_frame_tick = last_frame_tick + min_frame_ticks;
 
             if (now_tick + 1 < next_frame_tick) {
+                last_short_wait_tick = 0;
                 VK_CALL(sleep, next_frame_tick - now_tick - 1);
+            } else if (last_short_wait_tick == now_tick) {
+                last_short_wait_tick = 0;
+                VK_CALL(sleep, 1);
             } else {
+                last_short_wait_tick = now_tick;
                 VK_CALL(yield);
             }
         }

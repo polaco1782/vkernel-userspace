@@ -50,6 +50,31 @@ static int fb_pixel_bytes; /* bytes per pixel in framebuffer */
  * Palette helpers
  * --------------------------------------------------------------- */
 
+static qboolean VID_ReadFramebufferInfo(vk_framebuffer_info_t *out,
+                                        qboolean *changed)
+{
+    vk_framebuffer_info_t framebuffer = {};
+    VK_CALL(framebuffer_info, &framebuffer);
+    if (!framebuffer.valid || !framebuffer.base
+        || framebuffer.width < 1 || framebuffer.height < 1) {
+        return false;
+    }
+
+    if (changed) {
+        *changed = (vk_fb.base != framebuffer.base)
+                || (vk_fb.width != framebuffer.width)
+                || (vk_fb.height != framebuffer.height)
+                || (vk_fb.stride != framebuffer.stride)
+                || (vk_fb.format != framebuffer.format);
+    }
+
+    if (out) {
+        *out = framebuffer;
+    }
+
+    return true;
+}
+
 static u32 make_pixel(byte r, byte g, byte b)
 {
     if (vk_fb.format == VK_PIXEL_FORMAT_RGBX_8BPP)
@@ -194,8 +219,7 @@ void VID_UpdateTexture(SDL_Texture *texture, vrect_t *rect)
 
 void VID_InitWindow(void)
 {
-    VK_CALL(framebuffer_info, &vk_fb);
-    if (!vk_fb.valid) {
+    if (!VID_ReadFramebufferInfo(&vk_fb, NULL)) {
         Sys_Error("VID_InitWindow: no valid VK framebuffer\n");
     }
     vk_set_framebuffer_resize_events(1);
@@ -219,18 +243,18 @@ void VID_ResizeScreen(void)
     VID_ReallocBuffers();
 }
 
-void VID_NotifyFramebufferResize(i32 width, i32 height)
+void VID_CheckFramebufferState(void)
 {
-    if (width < 1 || height < 1) {
+    vk_framebuffer_info_t framebuffer = {};
+    qboolean framebuffer_changed = false;
+
+    if (!VID_ReadFramebufferInfo(&framebuffer, &framebuffer_changed)
+        || !framebuffer_changed) {
         return;
     }
 
-    VK_CALL(framebuffer_info, &vk_fb);
-    if (!vk_fb.valid) {
-        return;
-    }
-
-    if (vid.width == vk_fb.width && vid.height == vk_fb.height) {
+    vk_fb = framebuffer;
+    if (vid.width == (i32)vk_fb.width && vid.height == (i32)vk_fb.height) {
         return;
     }
 
@@ -241,6 +265,13 @@ void VID_NotifyFramebufferResize(i32 width, i32 height)
     vid.colormap = host_colormap;
     vid.recalc_refdef = true;
     VID_ResizeScreen();
+}
+
+void VID_NotifyFramebufferResize(i32 width, i32 height)
+{
+    (void)width;
+    (void)height;
+    VID_CheckFramebufferState();
 }
 
 void VID_UpdateWindow(vrect_t *rect)
