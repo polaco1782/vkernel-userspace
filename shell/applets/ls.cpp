@@ -44,10 +44,6 @@ void print_ls_entry(const std::string& name, bool is_directory, vk_u64 size)
     }
 
     std::cout << name << std::string(28 - name.size(), ' ') << "  " << size << '\n';
-    // put_padded(name, 28);
-    // std::cout << "  ";
-    // put_dec_width(size, 8);
-    // std::cout << '\n';
 }
 
 /* Parses one fs_list entry in the compact shell-specific record format. */

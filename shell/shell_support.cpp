@@ -199,30 +199,6 @@ auto trim_left(const std::string& text) -> std::string
     return text.substr(start);
 }
 
-/* Prints an unsigned value with left padding to a target column width. */
-void put_dec_width(vk_u64 value, vk_usize width)
-{
-    char_buffer<21> digits{};
-    vk_usize length = 0;
-
-    if (value == 0) {
-        digits[length++] = '0';
-    } else {
-        while (value > 0 && length < digits.size()) {
-            digits[length++] = static_cast<char>('0' + (value % 10ULL));
-            value /= 10ULL;
-        }
-    }
-
-    if (length < width) {
-        put_spaces(width - length);
-    }
-
-    while (length > 0) {
-        std::cout << digits[--length];
-    }
-}
-
 /* Returns the shell's configured root directory. */
 auto root_path() -> const std::string&
 {
