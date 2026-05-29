@@ -29,10 +29,10 @@ static void run(const std::string& arg)
             continue;
         }
         std::cout << "  ";
-        shell::put_padded(command->name, 12);
+        std::cout << command->name << std::string(12 - std::string(command->name).size(), ' ');
         std::cout << " - ";
         std::cout << command->help;
-        shell::put_char('\n');
+        std::cout << '\n';
     }
     std::cout << "  ?            - Alias for help\n";
     std::cout << "Programs can also be launched directly: foo or foo.vbin\n";

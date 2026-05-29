@@ -23,7 +23,7 @@ static void run(const std::string& arg)
     (void)arg;
     std::cout << "vkernel shell\n";
     std::cout << "  API version: ";
-    shell::put_dec(VK_API_VERSION);
+    std::cout << VK_API_VERSION;
     std::cout << "\n";
 }
 

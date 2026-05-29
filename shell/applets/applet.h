@@ -2,7 +2,12 @@
 
 #include "../../include/vk.h"
 
+#include <array>
+#include <iostream>
+#include <ranges>
+#include <span>
 #include <string>
+#include <vector>
 
 namespace shell {
 

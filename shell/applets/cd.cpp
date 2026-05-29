@@ -34,7 +34,7 @@ static void run(const std::string& arg)
     if (!shell::directory_exists(path)) {
         std::cout << "cd: directory not found: ";
         std::cout << raw;
-        shell::put_char('\n');
+        std::cout << '\n';
         return;
     }
 

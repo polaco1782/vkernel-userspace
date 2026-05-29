@@ -46,7 +46,7 @@ static void run(const std::string& arg)
     vk_usize read_size = 0;
     while ((read_size = VK_CALL(file_read_handle, fh, buffer.data(), buffer.size())) > 0) {
         for (unsigned char byte : std::span(buffer).first(read_size)) {
-            shell::put_char(static_cast<char>(byte));
+            std::cout << static_cast<char>(byte);
         }
     }
 

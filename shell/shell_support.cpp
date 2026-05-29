@@ -6,38 +6,19 @@
 #include "../include/vk.h"
 #include "applets/applet.h"
 
-#include <array>
-#include <iostream>
-#include <ranges>
-#include <span>
-#include <string>
-#include <vector>
-
 namespace {
 
-using size_type = vk_usize;
+constexpr vk_usize kLineMax = 256;
+constexpr vk_usize kPathMax = 256;
+constexpr vk_usize kPathComponentMax = 32;
+constexpr vk_usize kPathSegmentMax = 64;
 
-constexpr size_type kLineMax = 256;
-constexpr size_type kPathMax = 256;
-constexpr size_type kFsResponseMax = 4096;
-constexpr size_type kFsItemsMax = 64;
-constexpr size_type kFsItemMax = 96;
-constexpr size_type kPathComponentMax = 32;
-constexpr size_type kPathSegmentMax = 64;
-
-template <size_type N>
+template <vk_usize N>
 using char_buffer = std::array<char, N>;
 
 struct parsed_token {
     std::string text;
     std::string rest;
-    bool valid = false;
-};
-
-struct fs_item {
-    std::string name;
-    vk_u64 size = 0;
-    bool is_directory = false;
     bool valid = false;
 };
 
@@ -47,7 +28,7 @@ std::string s_cwd = "/";
 /* Returns true when a path ends with the requested suffix. */
 auto ends_with(const std::string& text, const char* suffix) -> bool
 {
-    size_type suffix_length = 0;
+    vk_usize suffix_length = 0;
     while (suffix[suffix_length] != '\0') {
         ++suffix_length;
     }
@@ -56,8 +37,8 @@ auto ends_with(const std::string& text, const char* suffix) -> bool
         return false;
     }
 
-    const size_type start = text.size() - suffix_length;
-    for (size_type index = 0; index < suffix_length; ++index) {
+    const vk_usize start = text.size() - suffix_length;
+    for (vk_usize index = 0; index < suffix_length; ++index) {
         if (text[start + index] != suffix[index]) {
             return false;
         }
@@ -69,18 +50,18 @@ auto ends_with(const std::string& text, const char* suffix) -> bool
 auto read_next_token(const std::string& input) -> parsed_token
 {
     parsed_token token{};
-    const size_type first = input.find_first_not_of(" \t");
+    const vk_usize first = input.find_first_not_of(" \t");
     if (first == std::string::npos) {
         return token;
     }
 
-    size_type cursor = first;
+    vk_usize cursor = first;
     char quote = '\0';
     if (input[cursor] == '"' || input[cursor] == '\'') {
         quote = input[cursor++];
     }
 
-    const size_type start = cursor;
+    const vk_usize start = cursor;
     while (cursor < input.size()) {
         const char ch = input[cursor];
         if (quote != '\0') {
@@ -102,7 +83,7 @@ auto read_next_token(const std::string& input) -> parsed_token
         ++cursor;
     }
 
-    const size_type rest_start = input.find_first_not_of(" \t", cursor);
+    const vk_usize rest_start = input.find_first_not_of(" \t", cursor);
     token.rest = rest_start == std::string::npos ? std::string() : input.substr(rest_start);
     token.valid = true;
     return token;
@@ -118,7 +99,7 @@ auto is_separator(char ch) -> bool
 auto normalize_absolute_path(const std::string& path, std::string& out) -> bool
 {
     std::vector<std::string> components;
-    size_type index = 0;
+    vk_usize index = 0;
 
     while (index < path.size()) {
         while (index < path.size() && is_separator(path[index])) {
@@ -128,7 +109,7 @@ auto normalize_absolute_path(const std::string& path, std::string& out) -> bool
             break;
         }
 
-        const size_type start = index;
+        const vk_usize start = index;
         while (index < path.size() && !is_separator(path[index])) {
             ++index;
         }
@@ -197,36 +178,6 @@ auto query_default_path() -> std::string
     return "/";
 }
 
-/* Parses one fs_list entry in the compact shell-specific record format. */
-auto parse_fs_item(const char* record) -> fs_item
-{
-    fs_item item{};
-    if (record == nullptr || record[0] == '\0' || record[1] != '\t') {
-        return item;
-    }
-
-    item.is_directory = record[0] == 'D';
-
-    size_type cursor = 2;
-    while (record[cursor] != '\0' && record[cursor] != '\t') {
-        item.name.push_back(record[cursor++]);
-    }
-
-    if (record[cursor] != '\t' || item.name.empty()) {
-        item.name.clear();
-        return item;
-    }
-
-    ++cursor;
-    while (record[cursor] >= '0' && record[cursor] <= '9') {
-        item.size = item.size * 10ULL + static_cast<vk_u64>(record[cursor] - '0');
-        ++cursor;
-    }
-
-    item.valid = true;
-    return item;
-}
-
 }  // namespace
 
 namespace shell {
@@ -241,54 +192,11 @@ void init_paths()
 /* Removes leading ASCII whitespace from a shell argument string. */
 auto trim_left(const std::string& text) -> std::string
 {
-    const size_type start = text.find_first_not_of(" \t");
+    const vk_usize start = text.find_first_not_of(" \t");
     if (start == std::string::npos) {
         return std::string();
     }
     return text.substr(start);
-}
-
-/* Writes a single character to the shell console. */
-void put_char(char ch)
-{
-    std::cout.put(ch);
-}
-
-/* Writes an unsigned decimal value to the shell console. */
-void put_dec(vk_u64 value)
-{
-    std::cout << value;
-}
-
-/* Writes a repeated space run for simple text alignment. */
-void put_spaces(vk_usize count)
-{
-    while (count-- > 0) {
-        put_char(' ');
-    }
-}
-
-/* Writes a string padded to a fixed display width. */
-void put_padded(const std::string& text, vk_usize width)
-{
-    std::cout << text;
-    if (text.size() < width) {
-        put_spaces(width - text.size());
-    }
-}
-
-/* Writes a C string padded to a fixed display width. */
-void put_padded(const char* text, vk_usize width)
-{
-    vk_usize length = 0;
-    while (text[length] != '\0') {
-        ++length;
-    }
-
-    std::cout << text;
-    if (length < width) {
-        put_spaces(width - length);
-    }
 }
 
 /* Prints an unsigned value with left padding to a target column width. */
@@ -311,7 +219,7 @@ void put_dec_width(vk_u64 value, vk_usize width)
     }
 
     while (length > 0) {
-        put_char(digits[--length]);
+        std::cout << digits[--length];
     }
 }
 
@@ -336,8 +244,8 @@ void set_current_working_directory(const std::string& path)
 /* Extracts the final path component from a filesystem path. */
 auto basename(const std::string& path) -> std::string
 {
-    size_type base = 0;
-    for (size_type index = 0; index < path.size(); ++index) {
+    vk_usize base = 0;
+    for (vk_usize index = 0; index < path.size(); ++index) {
         if (is_separator(path[index])) {
             base = index + 1;
         }
@@ -391,59 +299,6 @@ auto directory_exists(const std::string& path) -> bool
     return vk_kobj_response_ok(response.data());
 }
 
-/* Prints one shell ls row for either a file or directory. */
-void print_ls_entry(const std::string& name, bool is_directory, vk_u64 size)
-{
-    std::cout << (is_directory ? "d " : "f ");
-
-    if (is_directory) {
-        std::cout << name;
-        std::cout << "/\n";
-        return;
-    }
-
-    put_padded(name, 28);
-    std::cout << "  ";
-    put_dec_width(size, 8);
-    put_char('\n');
-}
-
-/* Lists a directory and renders the entries using the shell table format. */
-auto list_directory(const std::string& path) -> bool
-{
-    char_buffer<kFsResponseMax> response{};
-    std::array<char_buffer<kFsItemMax>, kFsItemsMax> raw_items{};
-    int printed = 0;
-
-    vk_kobj_rpc_path_json("fs_list", path.c_str(), response.data(), response.size());
-    if (!vk_kobj_response_ok(response.data())) {
-        return false;
-    }
-
-    const int item_count = vk_json_extract_string_array_field(response.data(),
-                                                              "items",
-                                                              raw_items[0].data(),
-                                                              kFsItemMax,
-                                                              kFsItemsMax);
-
-    const auto items = std::span(raw_items).first(static_cast<size_type>(item_count));
-    for (const auto& raw_item : items) {
-        const fs_item item = parse_fs_item(raw_item.data());
-        if (!item.valid) {
-            continue;
-        }
-
-        print_ls_entry(item.name, item.is_directory, item.size);
-        printed = 1;
-    }
-
-    if (printed == 0) {
-        std::cout << "(empty)\n";
-    }
-
-    return true;
-}
-
 /* Resolves and launches a userspace program, then waits for it to finish. */
 auto launch_program(const std::string& command_line, int verbose) -> int
 {
@@ -460,7 +315,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
         if (verbose) {
             std::cout << "run: program not found: ";
             std::cout << program.text;
-            put_char('\n');
+            std::cout << '\n';
         }
         return -1;
     }
@@ -473,7 +328,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
             if (verbose) {
                 std::cout << "run: program not found: ";
                 std::cout << program.text;
-                put_char('\n');
+                std::cout << '\n';
             }
             return -1;
         }
@@ -483,7 +338,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
             if (verbose) {
                 std::cout << "run: program not found: ";
                 std::cout << program.text;
-                put_char('\n');
+                std::cout << '\n';
             }
             return -1;
         }
@@ -517,14 +372,14 @@ auto launch_program(const std::string& command_line, int verbose) -> int
         if (verbose) {
             std::cout << "run: failed to launch ";
             std::cout << resolved_path;
-            put_char('\n');
+            std::cout << '\n';
         }
         return -1;
     }
 
     if (verbose) {
         std::cout << "run: spawned task ";
-        put_dec(static_cast<vk_u64>(task_id));
+        std::cout << task_id;
         std::cout << "\n";
     }
 

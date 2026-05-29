@@ -178,12 +178,12 @@ static void shell_history_add(const std::string& line)
 /* Repaints the editable command line after history navigation. */
 static void shell_redraw_line(const char* prompt, const std::string& line, size_type old_len)
 {
-    shell::put_char('\r');
+    std::cout << '\r';
     std::cout << prompt;
     for (size_type index = 0; index < old_len; ++index) {
-        shell::put_char(' ');
+        std::cout << ' ';
     }
-    shell::put_char('\r');
+    std::cout << '\r';
     std::cout << prompt;
     std::cout << line;
 }
@@ -209,25 +209,25 @@ static void shell_complete_line(std::string& line, size_type max, const char* pr
         size_type index = line.size();
         while (match[index] != '\0' && line.size() + 1 < max) {
             line.push_back(match[index]);
-            shell::put_char(match[index]);
+            std::cout << match[index];
             ++index;
         }
         if (line.size() + 1 < max) {
             line.push_back(' ');
-            shell::put_char(' ');
+            std::cout << ' ';
         }
         return;
     }
 
     if (match_count > 1) {
-        shell::put_char('\n');
+        std::cout << '\n';
         shell_for_each_command([&](const shell::command_spec& command) {
             if (command.name != nullptr && starts_with(std::string(command.name), line)) {
                 std::cout << command.name;
                 std::cout << "  ";
             }
         });
-        shell::put_char('\n');
+        std::cout << '\n';
         std::cout << prompt;
         std::cout << line;
     }
@@ -244,7 +244,7 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
         const char ch = VK_CALL(getc);
 
         if (ch == '\r' || ch == '\n') {
-            shell::put_char('\n');
+            std::cout << '\n';
             break;
         }
 
@@ -287,7 +287,7 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
 
         if (ch >= ' ' && ch < 0x7F) {
             line.push_back(ch);
-            shell::put_char(ch);
+            std::cout << ch;
             old_len = line.size();
         }
     }

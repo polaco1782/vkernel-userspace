@@ -56,13 +56,13 @@ static void run(const std::string& arg)
 
     if (!vk_terminate_task(task_id)) {
         std::cout << "kill: failed to terminate task ";
-        shell::put_dec(task_id);
+        std::cout << task_id;
         std::cout << "\n";
         return;
     }
 
     std::cout << "kill: termination requested for task ";
-    shell::put_dec(task_id);
+    std::cout << task_id;
     std::cout << "\n";
 }
 

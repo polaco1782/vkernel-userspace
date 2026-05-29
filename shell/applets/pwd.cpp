@@ -22,7 +22,7 @@ static void run(const std::string& arg)
 {
     (void)arg;
     std::cout << shell::current_working_directory();
-    shell::put_char('\n');
+    std::cout << '\n';
 }
 
 }  // namespace applet::pwd

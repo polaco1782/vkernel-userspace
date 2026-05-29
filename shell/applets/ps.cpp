@@ -181,7 +181,7 @@ static void run(const std::string& arg)
         }
 
         put_text(task.name);
-        put_char('\n');
+        std::cout << '\n';
     }
 
     if (count < total) {
