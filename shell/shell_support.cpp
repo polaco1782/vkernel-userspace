@@ -199,6 +199,13 @@ auto trim_left(const std::string& text) -> std::string
     return text.substr(start);
 }
 
+/* Splits the next applet argument while honoring shell quotes. */
+auto next_argument(const std::string& input) -> argument_token
+{
+    const parsed_token token = read_next_token(input);
+    return {token.text, token.rest, token.valid};
+}
+
 /* Returns the shell's configured root directory. */
 auto root_path() -> const std::string&
 {
@@ -233,6 +240,18 @@ auto basename(const std::string& path) -> std::string
 auto resolve_path(const std::string& raw, std::string& out) -> bool
 {
     return resolve_path_from(s_cwd, raw, out);
+}
+
+/* Finds a registered shell builtin by exact command name. */
+auto find_builtin_command(const std::string& name) -> const command_spec*
+{
+    const command_list_view commands = applet_commands();
+    for (const command_spec* command : std::span(commands.data, commands.count)) {
+        if (command != nullptr && name == std::string(command->name)) {
+            return command;
+        }
+    }
+    return nullptr;
 }
 
 /* Returns true when the user already provided a path instead of a bare command. */
