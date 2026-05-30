@@ -1,2 +1,0 @@
-# Runtime-loaded vkGUI plugins
-runtime_demo.vplg

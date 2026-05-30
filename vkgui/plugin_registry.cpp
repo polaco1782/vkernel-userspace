@@ -11,7 +11,52 @@ namespace vkgui {
 
 namespace {
 
-constexpr auto k_plugin_manifest_path = "/data/vkgui/vkgui_plugins.txt";
+constexpr auto k_plugin_directory_path = "/data/vkgui/plugins";
+constexpr auto k_plugin_suffix = ".vplg";
+constexpr int k_plugin_item_len = 96;
+constexpr int k_plugin_items_max = 96;
+constexpr vk_usize k_plugin_response_overhead = 3 * 1024;
+constexpr vk_usize k_plugin_response_max = (static_cast<vk_usize>(k_plugin_item_len)
+                                          * static_cast<vk_usize>(k_plugin_items_max))
+                                         + k_plugin_response_overhead;
+
+struct directory_item {
+    std::string name;
+    bool is_directory = false;
+};
+
+auto parse_directory_item(vk::string_view record, directory_item& out) -> bool
+{
+    if (record.size() < 4 || record[1] != '\t') {
+        return false;
+    }
+
+    vk_usize second_tab = k_not_found;
+    for (vk_usize index = 2; index < record.size(); ++index) {
+        if (record[index] == '\t') {
+            second_tab = index;
+            break;
+        }
+    }
+    if (second_tab == k_not_found || second_tab <= 2) {
+        return false;
+    }
+    if (record[0] != 'D' && record[0] != 'F') {
+        return false;
+    }
+
+    out.is_directory = record[0] == 'D';
+    out.name = string_from_view(subview(record, 2, second_tab - 2));
+    return !out.name.empty();
+}
+
+auto join_plugin_path(vk::string_view name) -> std::string
+{
+    std::string path = k_plugin_directory_path;
+    path.push_back('/');
+    path.append(name.data(), name.size());
+    return path;
+}
 
 class DynamicPanelPlugin final : public PanelPlugin {
 public:
@@ -121,45 +166,33 @@ void PanelRegistry::add_external_plugin(vk::string_view path, PluginHost& host)
 
 void PanelRegistry::load_external_plugins(PluginHost& host)
 {
-    const vk_file_handle_t handle = VK_CALL(file_open, k_plugin_manifest_path, "r");
-    if (handle == static_cast<vk_file_handle_t>(0)) {
-        host.log.add("vkGUI plugin loader: plugin manifest not found.");
+    std::array<char, k_plugin_response_max> response {};
+    std::array<std::array<char, k_plugin_item_len>, k_plugin_items_max> raw_items {};
+
+    vk_kobj_rpc_path_json("fs_list", k_plugin_directory_path, response.data(), response.size());
+    if (!vk_kobj_response_ok(response.data())) {
+        host.log.add("vkGUI plugin loader: plugin directory not found.");
         return;
     }
 
-    std::array<char, 256> chunk {};
-    std::string line;
-    for (;;) {
-        const vk_usize count = VK_CALL(file_read_handle, handle, chunk.data(), chunk.size());
-        if (count == 0) {
-            break;
+    const int item_count = vk_json_extract_string_array_field(response.data(),
+                                                              "items",
+                                                              raw_items[0].data(),
+                                                              static_cast<vk_usize>(k_plugin_item_len),
+                                                              k_plugin_items_max);
+
+    for (int index = 0; index < item_count; ++index) {
+        directory_item item {};
+        if (!parse_directory_item(buffer_view(raw_items[index]), item)) {
+            continue;
+        }
+        if (item.is_directory || !ends_with(string_view_of(item.name), k_plugin_suffix)) {
+            continue;
         }
 
-        for (vk_usize index = 0; index < count; ++index) {
-            const char ch = chunk[index];
-            if (ch == '\r') {
-                continue;
-            }
-            if (ch == '\n') {
-                std::string trimmed = trim_ascii(string_view_of(line));
-                if (!trimmed.empty() && trimmed[0] != '#') {
-                    add_external_plugin(string_view_of(trimmed), host);
-                }
-                line.clear();
-                continue;
-            }
-            line.push_back(ch);
-        }
+        const std::string path = join_plugin_path(string_view_of(item.name));
+        add_external_plugin(string_view_of(path), host);
     }
-
-    if (!line.empty()) {
-        std::string trimmed = trim_ascii(string_view_of(line));
-        if (!trimmed.empty() && trimmed[0] != '#') {
-            add_external_plugin(string_view_of(trimmed), host);
-        }
-    }
-
-    VK_CALL(file_close, handle);
 }
 
 void PanelRegistry::discover(PluginHost& host)
