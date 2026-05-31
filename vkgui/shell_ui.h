@@ -34,9 +34,13 @@ private:
     [[nodiscard]] auto current_settings_snapshot() const -> PersistedSettings;
     void apply_style();
     void apply_saved_settings(const PersistedSettings& settings);
+    void load_theme_editor_from_selected_scheme();
+    void discard_theme_editor_changes();
+    void save_current_theme(ConsoleLog& log);
     void draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_registry);
     void draw_info_window(const vk_framebuffer_info_t& framebuffer, WindowManager& window_manager, ConsoleLog& log);
     void draw_settings_window(WindowManager& window_manager, ConsoleLog& log);
+    void draw_theme_editor_window(WindowManager& window_manager, ConsoleLog& log);
     void draw_about_modal();
     void sync_settings(ConsoleLog& log);
 
@@ -45,6 +49,7 @@ private:
     bool show_info_ = true;
     bool show_console_ = true;
     bool show_settings_ = false;
+    bool show_theme_editor_ = false;
     bool show_demo_ = false;
     bool show_task_manager_ = false;
     bool show_kobj_ = false;
@@ -57,9 +62,12 @@ private:
     bool counter_wrap_ = false;
     int counter_max_ = 100;
 
+    ThemeCatalog theme_catalog_ {};
     int style_index_ = 0;
     float font_scale_ = 1.0f;
     bool transparency_ = false;
+    std::array<float, 3> theme_editor_clear_color_ {{ 22.0f / 255.0f, 22.0f / 255.0f, 30.0f / 255.0f }};
+    ImGuiStyle theme_editor_reference_style_ {};
 
     SettingsStore settings_store_;
     PersistedSettings last_saved_settings_ {};

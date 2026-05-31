@@ -350,7 +350,7 @@ static inline unsigned int pack_px(unsigned int r, unsigned int g, unsigned int 
                                     vk_pixel_format_t fmt)
 {
     if (fmt == VK_PIXEL_FORMAT_BGRX_8BPP)
-        return (b << 16) | (g << 8) | r;
+        return (r << 16) | (g << 8) | b;
     return (r << 16) | (g << 8) | b; /* RGBX and fallback */
 }
 
@@ -359,13 +359,33 @@ static inline void unpack_px(unsigned int px, vk_pixel_format_t fmt,
                                unsigned int* r, unsigned int* g, unsigned int* b)
 {
     if (fmt == VK_PIXEL_FORMAT_BGRX_8BPP) {
-        *r = (px      ) & 0xFFu;
+        *r = (px >> 16) & 0xFFu;
         *g = (px >>  8) & 0xFFu;
-        *b = (px >> 16) & 0xFFu;
+        *b = (px      ) & 0xFFu;
     } else {
         *r = (px >> 16) & 0xFFu;
         *g = (px >>  8) & 0xFFu;
         *b = (px      ) & 0xFFu;
+    }
+}
+
+static inline void unpack_imgui_col(ImU32 col,
+                                    unsigned int* r,
+                                    unsigned int* g,
+                                    unsigned int* b,
+                                    unsigned int* a)
+{
+    if (r != nullptr) {
+        *r = (col >> IM_COL32_R_SHIFT) & 0xFFu;
+    }
+    if (g != nullptr) {
+        *g = (col >> IM_COL32_G_SHIFT) & 0xFFu;
+    }
+    if (b != nullptr) {
+        *b = (col >> IM_COL32_B_SHIFT) & 0xFFu;
+    }
+    if (a != nullptr) {
+        *a = (col >> IM_COL32_A_SHIFT) & 0xFFu;
     }
 }
 
@@ -507,14 +527,16 @@ static bool try_render_quad(
             int ty = (int)(v[0]->uv.y * (float)fth); if (ty < 0) ty = 0; else if (ty >= fth) ty = fth - 1;
             unsigned char ts = ftex[ty * ftw + tx];
 
-            float alpha = (float)((col >> 24) & 0xFFu) * (float)ts
+            unsigned int cr = 0;
+            unsigned int cg = 0;
+            unsigned int cb = 0;
+            unsigned int ca = 0;
+            unpack_imgui_col(col, &cr, &cg, &cb, &ca);
+
+            float alpha = (float)ca * (float)ts
                           * (1.0f / (255.0f * 255.0f));
 
             if (alpha <= 0.002f) return true; /* invisible */
-
-            unsigned int cr = (col      ) & 0xFFu;
-            unsigned int cg = (col >>  8) & 0xFFu;
-            unsigned int cb = (col >> 16) & 0xFFu;
 
             if (!g_blend_enabled || alpha >= 0.999f) {
                 /* Opaque rect: tight store loop, no read-modify-write. */
@@ -559,8 +581,12 @@ static bool try_render_quad(
         float du_dx = (u_right - u_left) / rect_w;
         float dv_dy = (v_bottom - v_top) / rect_h;
 
-        unsigned int cr = col & 0xFFu, cg = (col >> 8) & 0xFFu, cb = (col >> 16) & 0xFFu;
-        float fva  = (float)((col >> 24) & 0xFFu) * (1.0f / (255.0f * 255.0f));
+        unsigned int cr = 0;
+        unsigned int cg = 0;
+        unsigned int cb = 0;
+        unsigned int ca = 0;
+        unpack_imgui_col(col, &cr, &cg, &cb, &ca);
+        float fva  = (float)ca * (1.0f / (255.0f * 255.0f));
         float fcr  = (float)cr, fcg = (float)cg, fcb = (float)cb;
         float ftw_f = (float)ftw, fth_f = (float)fth;
 
@@ -724,13 +750,13 @@ static void rasterize_triangle(
         unsigned char ta1 = ftex[clamp_ty(v1.uv.y) * ftw + clamp_tx(v1.uv.x)];
         unsigned char ta2 = ftex[clamp_ty(v2.uv.y) * ftw + clamp_tx(v2.uv.x)];
         if (ta0 == ta1 && ta1 == ta2) {
-            unsigned int va  = (v0.col >> 24) & 0xFFu;
+            unsigned int cr = 0;
+            unsigned int cg = 0;
+            unsigned int cb = 0;
+            unsigned int va = 0;
+            unpack_imgui_col(v0.col, &cr, &cg, &cb, &va);
             float alpha = (float)va * (float)ta0 * (1.0f / (255.0f * 255.0f));
             if (alpha >= 0.002f) {
-                unsigned int cr = (v0.col      ) & 0xFFu;
-                unsigned int cg = (v0.col >>  8) & 0xFFu;
-                unsigned int cb = (v0.col >> 16) & 0xFFu;
-
                 if (!g_blend_enabled || alpha >= 0.999f) {
                     /* Opaque: just coverage-test + store */
                     unsigned int packed = pack_px(cr, cg, cb, fmt);
@@ -774,18 +800,33 @@ static void rasterize_triangle(
     }
 
     /* --- General path: compute full attribute derivatives --- */
-    float r0 = (float)((v0.col      ) & 0xFFu);
-    float g0 = (float)((v0.col >>  8) & 0xFFu);
-    float b0 = (float)((v0.col >> 16) & 0xFFu);
-    float a0 = (float)((v0.col >> 24) & 0xFFu);
-    float r1 = (float)((v1.col      ) & 0xFFu);
-    float g1 = (float)((v1.col >>  8) & 0xFFu);
-    float b1 = (float)((v1.col >> 16) & 0xFFu);
-    float a1 = (float)((v1.col >> 24) & 0xFFu);
-    float r2 = (float)((v2.col      ) & 0xFFu);
-    float g2 = (float)((v2.col >>  8) & 0xFFu);
-    float b2 = (float)((v2.col >> 16) & 0xFFu);
-    float a2 = (float)((v2.col >> 24) & 0xFFu);
+    unsigned int r0_u8 = 0;
+    unsigned int g0_u8 = 0;
+    unsigned int b0_u8 = 0;
+    unsigned int a0_u8 = 0;
+    unsigned int r1_u8 = 0;
+    unsigned int g1_u8 = 0;
+    unsigned int b1_u8 = 0;
+    unsigned int a1_u8 = 0;
+    unsigned int r2_u8 = 0;
+    unsigned int g2_u8 = 0;
+    unsigned int b2_u8 = 0;
+    unsigned int a2_u8 = 0;
+    unpack_imgui_col(v0.col, &r0_u8, &g0_u8, &b0_u8, &a0_u8);
+    unpack_imgui_col(v1.col, &r1_u8, &g1_u8, &b1_u8, &a1_u8);
+    unpack_imgui_col(v2.col, &r2_u8, &g2_u8, &b2_u8, &a2_u8);
+    float r0 = (float)r0_u8;
+    float g0 = (float)g0_u8;
+    float b0 = (float)b0_u8;
+    float a0 = (float)a0_u8;
+    float r1 = (float)r1_u8;
+    float g1 = (float)g1_u8;
+    float b1 = (float)b1_u8;
+    float a1 = (float)a1_u8;
+    float r2 = (float)r2_u8;
+    float g2 = (float)g2_u8;
+    float b2 = (float)b2_u8;
+    float a2 = (float)a2_u8;
     float u0 = v0.uv.x, u1 = v1.uv.x, u2 = v2.uv.x;
     float vc0= v0.uv.y, vc1= v1.uv.y, vc2= v2.uv.y;
 
@@ -917,10 +958,11 @@ static void draw_cursor(unsigned int* buf, int W, int H, int S,
     };
     auto draw_layer = [&](float draw_x, float draw_y,
                           int src_x0, int src_y0, ImU32 rgba) {
-        unsigned int sr = (rgba      ) & 0xFFu;
-        unsigned int sg = (rgba >>  8) & 0xFFu;
-        unsigned int sb = (rgba >> 16) & 0xFFu;
-        unsigned int sa = (rgba >> 24) & 0xFFu;
+        unsigned int sr = 0;
+        unsigned int sg = 0;
+        unsigned int sb = 0;
+        unsigned int sa = 0;
+        unpack_imgui_col(rgba, &sr, &sg, &sb, &sa);
         if (sa == 0u)
             return;
 

@@ -166,6 +166,7 @@ OUR_SRCS   := console_log.cpp        \
 			  settings_store.cpp     \
 			  shell_ui.cpp           \
 			  sqlite_db.cpp          \
+			  theme_scheme.cpp       \
 			  task_manager_panel.cpp \
 			  vkfm_panel.cpp         \
 			  window_manager.cpp     \

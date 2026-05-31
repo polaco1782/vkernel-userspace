@@ -13,236 +13,32 @@
 namespace vkgui {
 
 namespace {
-struct RgbColor {
-    unsigned int r;
-    unsigned int g;
-    unsigned int b;
-};
-
-[[nodiscard]] constexpr auto hex_digit_value(char digit) -> unsigned int
+auto theme_name_getter(void* data, int index, const char** out_text) -> bool
 {
-    if (digit >= '0' && digit <= '9') {
-        return static_cast<unsigned int>(digit - '0');
+    if (out_text == nullptr) {
+        return false;
     }
-    if (digit >= 'a' && digit <= 'f') {
-        return static_cast<unsigned int>(digit - 'a' + 10);
+
+    const auto* catalog = static_cast<const ThemeCatalog*>(data);
+    if (catalog == nullptr || index < 0 || index >= catalog->count) {
+        return false;
     }
-    if (digit >= 'A' && digit <= 'F') {
-        return static_cast<unsigned int>(digit - 'A' + 10);
-    }
-    return 0;
+
+    *out_text = catalog->schemes[index].name.c_str();
+    return true;
 }
 
-[[nodiscard]] constexpr auto is_hex_digit(char digit) -> bool
+auto clamp_theme_color_byte(float value) -> int
 {
-    return (digit >= '0' && digit <= '9')
-        || (digit >= 'a' && digit <= 'f')
-        || (digit >= 'A' && digit <= 'F');
-}
-
-[[nodiscard]] auto parse_rgb_hex(vk::string_view hex_string) -> RgbColor
-{
-    if (hex_string.size() != 7 || hex_string[0] != '#') {
-        return {0, 0, 0};
+    if (value <= 0.0f) {
+        return 0;
     }
-    for (vk_u32 index = 1; index < hex_string.size(); ++index) {
-        if (!is_hex_digit(hex_string[index])) {
-            return {0, 0, 0};
-        }
+    if (value >= 1.0f) {
+        return 255;
     }
-
-    /* Accept #RRGGBB and keep the fallback deterministic for malformed input. */
-    return {
-        (hex_digit_value(hex_string[1]) << 4) | hex_digit_value(hex_string[2]),
-        (hex_digit_value(hex_string[3]) << 4) | hex_digit_value(hex_string[4]),
-        (hex_digit_value(hex_string[5]) << 4) | hex_digit_value(hex_string[6]),
-    };
+    return static_cast<int>(value * 255.0f + 0.5f);
 }
-
-[[nodiscard]] constexpr auto from_rgb(float r, float g, float b, float a) -> ImVec4
-{
-    /* Our renderer path expects ImGui colors pre-swizzled to BGR. */
-    return ImVec4(b, g, r, a);
-}
-
-[[nodiscard]] auto FROM_HEX(vk::string_view hex, float alpha) -> ImVec4
-{
-    const RgbColor color = parse_rgb_hex(hex);
-    return from_rgb((float)color.r / 255.0f,
-                    (float)color.g / 255.0f,
-                    (float)color.b / 255.0f,
-                    alpha);
-
 } // namespace
-
-void ImGui_ImplVK_SetClearColor(vk::string_view hex_string)
-{
-    const auto color = parse_rgb_hex(hex_string);
-    ::ImGui_ImplVK_SetClearColor(color.b, color.g, color.r);
-}
-
-void apply_scheme_ocean()
-{
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-
-    colors[ImGuiCol_WindowBg] = from_rgb(0.05f, 0.08f, 0.12f, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = from_rgb(0.04f, 0.07f, 0.10f, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = from_rgb(0.06f, 0.09f, 0.14f, colors[ImGuiCol_PopupBg].w);
-    colors[ImGuiCol_TitleBg] = from_rgb(0.03f, 0.20f, 0.26f, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = from_rgb(0.04f, 0.28f, 0.35f, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_Header] = from_rgb(0.08f, 0.33f, 0.46f, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = from_rgb(0.12f, 0.41f, 0.56f, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = from_rgb(0.14f, 0.46f, 0.62f, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Button] = from_rgb(0.07f, 0.36f, 0.50f, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = from_rgb(0.11f, 0.45f, 0.61f, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = from_rgb(0.14f, 0.50f, 0.68f, colors[ImGuiCol_ButtonActive].w);
-    colors[ImGuiCol_FrameBg] = from_rgb(0.08f, 0.15f, 0.22f, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = from_rgb(0.12f, 0.23f, 0.32f, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = from_rgb(0.13f, 0.27f, 0.38f, colors[ImGuiCol_FrameBgActive].w);
-    colors[ImGuiCol_SliderGrab] = from_rgb(0.24f, 0.64f, 0.82f, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = from_rgb(0.30f, 0.74f, 0.92f, colors[ImGuiCol_SliderGrabActive].w);
-    colors[ImGuiCol_CheckMark] = from_rgb(0.36f, 0.80f, 0.94f, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_Separator] = from_rgb(0.18f, 0.34f, 0.44f, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = from_rgb(0.22f, 0.56f, 0.72f, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_Tab] = from_rgb(0.07f, 0.24f, 0.34f, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabActive] = from_rgb(0.10f, 0.35f, 0.49f, colors[ImGuiCol_TabActive].w);
-}
-
-void apply_scheme_forest()
-{
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-
-    colors[ImGuiCol_WindowBg] = from_rgb(0.07f, 0.10f, 0.08f, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = from_rgb(0.05f, 0.08f, 0.06f, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = from_rgb(0.08f, 0.12f, 0.09f, colors[ImGuiCol_PopupBg].w);
-    colors[ImGuiCol_TitleBg] = from_rgb(0.12f, 0.22f, 0.15f, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = from_rgb(0.15f, 0.30f, 0.19f, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_Header] = from_rgb(0.17f, 0.32f, 0.20f, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = from_rgb(0.22f, 0.40f, 0.25f, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = from_rgb(0.25f, 0.45f, 0.27f, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Button] = from_rgb(0.16f, 0.36f, 0.22f, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = from_rgb(0.22f, 0.45f, 0.27f, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = from_rgb(0.26f, 0.52f, 0.31f, colors[ImGuiCol_ButtonActive].w);
-    colors[ImGuiCol_FrameBg] = from_rgb(0.11f, 0.17f, 0.12f, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = from_rgb(0.16f, 0.25f, 0.17f, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = from_rgb(0.19f, 0.29f, 0.20f, colors[ImGuiCol_FrameBgActive].w);
-    colors[ImGuiCol_SliderGrab] = from_rgb(0.45f, 0.71f, 0.35f, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = from_rgb(0.55f, 0.80f, 0.44f, colors[ImGuiCol_SliderGrabActive].w);
-    colors[ImGuiCol_CheckMark] = from_rgb(0.63f, 0.86f, 0.45f, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_Separator] = from_rgb(0.24f, 0.35f, 0.25f, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = from_rgb(0.33f, 0.55f, 0.36f, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_Tab] = from_rgb(0.12f, 0.21f, 0.14f, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabActive] = from_rgb(0.21f, 0.36f, 0.24f, colors[ImGuiCol_TabActive].w);
-}
-
-void apply_scheme_sunset()
-{
-    ImGui::StyleColorsDark();
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-
-    colors[ImGuiCol_WindowBg] = from_rgb(0.14f, 0.09f, 0.10f, colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = from_rgb(0.12f, 0.07f, 0.08f, colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = from_rgb(0.16f, 0.10f, 0.11f, colors[ImGuiCol_PopupBg].w);
-    colors[ImGuiCol_TitleBg] = from_rgb(0.31f, 0.15f, 0.12f, colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = from_rgb(0.40f, 0.20f, 0.16f, colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_Header] = from_rgb(0.45f, 0.24f, 0.17f, colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = from_rgb(0.53f, 0.30f, 0.20f, colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = from_rgb(0.59f, 0.35f, 0.22f, colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Button] = from_rgb(0.47f, 0.24f, 0.15f, colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = from_rgb(0.56f, 0.30f, 0.18f, colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = from_rgb(0.64f, 0.35f, 0.20f, colors[ImGuiCol_ButtonActive].w);
-    colors[ImGuiCol_FrameBg] = from_rgb(0.20f, 0.12f, 0.11f, colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = from_rgb(0.29f, 0.17f, 0.14f, colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = from_rgb(0.35f, 0.20f, 0.16f, colors[ImGuiCol_FrameBgActive].w);
-    colors[ImGuiCol_SliderGrab] = from_rgb(0.88f, 0.52f, 0.23f, colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = from_rgb(0.97f, 0.61f, 0.28f, colors[ImGuiCol_SliderGrabActive].w);
-    colors[ImGuiCol_CheckMark] = from_rgb(0.99f, 0.73f, 0.35f, colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_Separator] = from_rgb(0.41f, 0.24f, 0.17f, colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = from_rgb(0.67f, 0.37f, 0.21f, colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_Tab] = from_rgb(0.24f, 0.13f, 0.11f, colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabActive] = from_rgb(0.40f, 0.22f, 0.15f, colors[ImGuiCol_TabActive].w);
-}
-
-void apply_scheme_win9x()
-{
-    ImGui::StyleColorsClassic();
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-
-    colors[ImGuiCol_Text] = FROM_HEX("#000000", colors[ImGuiCol_Text].w);
-    colors[ImGuiCol_TextDisabled] = FROM_HEX("#7F7F7F", colors[ImGuiCol_TextDisabled].w);
-
-    /* Windows and controls stay classic gray (#d4d0c8). */
-    colors[ImGuiCol_WindowBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_WindowBg].w);
-    colors[ImGuiCol_ChildBg] = FROM_HEX("#FFFFFF", colors[ImGuiCol_ChildBg].w);
-    colors[ImGuiCol_PopupBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_PopupBg].w);
-
-    /* 3D cue: white highlight and dark gray shadow. */
-    colors[ImGuiCol_Border] = FROM_HEX("#4F4F4F", colors[ImGuiCol_Border].w);
-    colors[ImGuiCol_BorderShadow] = FROM_HEX("#FFFFFF", colors[ImGuiCol_BorderShadow].w);
-
-    colors[ImGuiCol_FrameBg] = FROM_HEX("#FFFFFF", colors[ImGuiCol_FrameBg].w);
-    colors[ImGuiCol_FrameBgHovered] = FROM_HEX("#DCDCDC", colors[ImGuiCol_FrameBgHovered].w);
-    colors[ImGuiCol_FrameBgActive] = FROM_HEX("#A8A8A8", colors[ImGuiCol_FrameBgActive].w);
-
-    colors[ImGuiCol_TitleBg] = FROM_HEX("#4040A0", colors[ImGuiCol_TitleBg].w);
-    colors[ImGuiCol_TitleBgActive] = FROM_HEX("#0A246A", colors[ImGuiCol_TitleBgActive].w);
-    colors[ImGuiCol_MenuBarBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_MenuBarBg].w);
-
-    colors[ImGuiCol_ScrollbarBg] = FROM_HEX("#d4d0c8", colors[ImGuiCol_ScrollbarBg].w);
-    colors[ImGuiCol_ScrollbarGrab] = FROM_HEX("#AEAEAE", colors[ImGuiCol_ScrollbarGrab].w);
-    colors[ImGuiCol_ScrollbarGrabHovered] = FROM_HEX("#949494", colors[ImGuiCol_ScrollbarGrabHovered].w);
-    colors[ImGuiCol_ScrollbarGrabActive] = FROM_HEX("#737373", colors[ImGuiCol_ScrollbarGrabActive].w);
-
-    colors[ImGuiCol_CheckMark] = FROM_HEX("#000000", colors[ImGuiCol_CheckMark].w);
-    colors[ImGuiCol_SliderGrab] = FROM_HEX("#A0A0A0", colors[ImGuiCol_SliderGrab].w);
-    colors[ImGuiCol_SliderGrabActive] = FROM_HEX("#737373", colors[ImGuiCol_SliderGrabActive].w);
-
-    colors[ImGuiCol_Button] = FROM_HEX("#d4d0c8", colors[ImGuiCol_Button].w);
-    colors[ImGuiCol_ButtonHovered] = FROM_HEX("#DCDCDC", colors[ImGuiCol_ButtonHovered].w);
-    colors[ImGuiCol_ButtonActive] = FROM_HEX("#A8A8A8", colors[ImGuiCol_ButtonActive].w);
-
-    // table rows are same as window background, with a dark separator line, so they look like they are sunken into the window.
-    colors[ImGuiCol_TableRowBg] = FROM_HEX("#FFFFFF", colors[ImGuiCol_TableRowBg].w);
-
-    colors[ImGuiCol_Header] = FROM_HEX("#C6D2EA", colors[ImGuiCol_Header].w);
-    colors[ImGuiCol_HeaderHovered] = FROM_HEX("#ACCAE6", colors[ImGuiCol_HeaderHovered].w);
-    colors[ImGuiCol_HeaderActive] = FROM_HEX("#8EADDF", colors[ImGuiCol_HeaderActive].w);
-    colors[ImGuiCol_Separator] = FROM_HEX("#606060", colors[ImGuiCol_Separator].w);
-    colors[ImGuiCol_ResizeGrip] = FROM_HEX("#A0A0A0", colors[ImGuiCol_ResizeGrip].w);
-    colors[ImGuiCol_ResizeGripHovered] = FROM_HEX("#808080", colors[ImGuiCol_ResizeGripHovered].w);
-    colors[ImGuiCol_ResizeGripActive] = FROM_HEX("#5A5A5A", colors[ImGuiCol_ResizeGripActive].w);
-    colors[ImGuiCol_Tab] = FROM_HEX("#d4d0c8", colors[ImGuiCol_Tab].w);
-    colors[ImGuiCol_TabHovered] = FROM_HEX("#DCDCDC", colors[ImGuiCol_TabHovered].w);
-    colors[ImGuiCol_TabActive] = FROM_HEX("#A8A8A8", colors[ImGuiCol_TabActive].w);
-
-    style.WindowRounding = 0.0f;
-    style.ChildRounding = 0.0f;
-    style.FrameRounding = 0.0f;
-    style.PopupRounding = 0.0f;
-    style.ScrollbarRounding = 0.0f;
-    style.GrabRounding = 0.0f;
-    style.TabRounding = 0.0f;
-    style.WindowBorderSize = 1.0f;
-    style.FrameBorderSize = 1.0f;
-    style.PopupBorderSize = 1.0f;
-    style.TabBorderSize = 1.0f;
-    style.FramePadding = ImVec2(5.0f, 3.0f);
-
-    style.ScrollbarSize = 20.0f;
-    style.GrabMinSize = 15.0f;
-    style.WindowBorderSize = 1.0f;
-
-    style.AntiAliasedFill = true;
-    style.AntiAliasedLines = true;
-}
-
-}
 
 void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* log)
 {
@@ -255,13 +51,33 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
         default_app_height_ = 200;
     }
 
+    theme_catalog_ = builtin_theme_catalog();
+
     if (settings_store_.open("/data/vkgui/vkgui_settings.db")) {
+        if (settings_store_.seeded_default_themes() && log != nullptr) {
+            log->add("vkGUI settings: seeded default color schemes into /data/vkgui/vkgui_settings.db.");
+        }
+
+        ThemeCatalog loaded_themes;
+        if (settings_store_.load_theme_catalog(loaded_themes)) {
+            if (loaded_themes.count > 0) {
+                theme_catalog_ = loaded_themes;
+            } else if (log != nullptr) {
+                log->add("vkGUI settings: theme catalog was empty; using built-in defaults.");
+            }
+        } else if (log != nullptr) {
+            log->addf("vkGUI settings: failed to load color schemes from /data/vkgui/vkgui_settings.db (%s); using built-in defaults.",
+                      settings_store_.last_error().c_str());
+        }
+
         PersistedSettings settings = current_settings_snapshot();
         if (settings_store_.load(settings)) {
             apply_saved_settings(settings);
             last_saved_settings_ = settings;
             settings_store_ready_ = true;
-            log->add("vkGUI settings: loaded saved settings from /data/vkgui/vkgui_settings.db.");
+            if (log != nullptr) {
+                log->add("vkGUI settings: loaded saved settings from /data/vkgui/vkgui_settings.db.");
+            }
         } else if (log != nullptr) {
             log->addf("vkGUI settings: failed to load /data/vkgui/vkgui_settings.db (%s).",
                       settings_store_.last_error().c_str());
@@ -274,6 +90,7 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
     ImGui_ImplVK_SetTransparencyEnabled(transparency_);
     apply_style();
     ImGui::GetIO().FontGlobalScale = font_scale_;
+    load_theme_editor_from_selected_scheme();
 }
 
 void ShellUi::request_quit(ConsoleLog* log, vk::string_view message)
@@ -319,7 +136,8 @@ auto ShellUi::current_settings_snapshot() const -> PersistedSettings
 void ShellUi::apply_saved_settings(const PersistedSettings& settings)
 {
     style_index_ = settings.style_index;
-    if (style_index_ < 0 || style_index_ > 6) {
+    const int max_style_index = theme_catalog_.count > 0 ? theme_catalog_.count - 1 : 0;
+    if (style_index_ < 0 || style_index_ > max_style_index) {
         style_index_ = 0;
     }
 
@@ -340,33 +158,14 @@ void ShellUi::apply_saved_settings(const PersistedSettings& settings)
 
 void ShellUi::apply_style()
 {
-    /* Default desktop clear used by non-Win9x themes. */
-    ::ImGui_ImplVK_SetClearColor(22, 22, 30);
-
-    switch (style_index_) {
-    case 1:
-        ImGui::StyleColorsLight();
-        break;
-    case 2:
-        ImGui::StyleColorsClassic();
-        break;
-    case 3:
-        apply_scheme_ocean();
-        break;
-    case 4:
-        apply_scheme_forest();
-        break;
-    case 5:
-        apply_scheme_sunset();
-        break;
-    case 6:
-        apply_scheme_win9x();
-        /* Framebuffer clear color stays on the backend's RGB byte path. */
-        ImGui_ImplVK_SetClearColor("#3a6ea5");
-        break;
-    default:
+    if (theme_catalog_.count <= 0) {
         ImGui::StyleColorsDark();
-        break;
+        ::ImGui_ImplVK_SetClearColor(22, 22, 30);
+    } else {
+        if (style_index_ < 0 || style_index_ >= theme_catalog_.count) {
+            style_index_ = 0;
+        }
+        apply_theme_scheme(theme_catalog_.schemes[style_index_]);
     }
 
     if (!transparency_) {
@@ -375,6 +174,61 @@ void ShellUi::apply_style()
             style.Colors[index].w = 1.0f;
         }
     }
+}
+
+void ShellUi::load_theme_editor_from_selected_scheme()
+{
+    if (theme_catalog_.count <= 0) {
+        return;
+    }
+    if (style_index_ < 0 || style_index_ >= theme_catalog_.count) {
+        style_index_ = 0;
+    }
+
+    const ThemeScheme& scheme = theme_catalog_.schemes[style_index_];
+    theme_editor_clear_color_[0] = static_cast<float>(scheme.clear_r) / 255.0f;
+    theme_editor_clear_color_[1] = static_cast<float>(scheme.clear_g) / 255.0f;
+    theme_editor_clear_color_[2] = static_cast<float>(scheme.clear_b) / 255.0f;
+    theme_editor_reference_style_ = ImGui::GetStyle();
+}
+
+void ShellUi::discard_theme_editor_changes()
+{
+    if (theme_catalog_.count <= 0) {
+        return;
+    }
+
+    apply_style();
+    load_theme_editor_from_selected_scheme();
+}
+
+void ShellUi::save_current_theme(ConsoleLog& log)
+{
+    if (theme_catalog_.count <= 0 || style_index_ < 0 || style_index_ >= theme_catalog_.count) {
+        return;
+    }
+
+    ThemeCatalog updated_catalog = theme_catalog_;
+    const ThemeScheme& current_scheme = updated_catalog.schemes[style_index_];
+    const int clear_r = clamp_theme_color_byte(theme_editor_clear_color_[0]);
+    const int clear_g = clamp_theme_color_byte(theme_editor_clear_color_[1]);
+    const int clear_b = clamp_theme_color_byte(theme_editor_clear_color_[2]);
+    updated_catalog.schemes[style_index_] = theme_scheme_from_style(string_view_of(current_scheme.name),
+                                                                    current_scheme.base_style,
+                                                                    clear_r,
+                                                                    clear_g,
+                                                                    clear_b,
+                                                                    ImGui::GetStyle());
+
+    if (!settings_store_.save_theme_catalog(updated_catalog)) {
+        log.addf("vkGUI settings: failed to save themes to /data/vkgui/vkgui_settings.db (%s).",
+                 settings_store_.last_error().c_str());
+        return;
+    }
+
+    theme_catalog_ = updated_catalog;
+    discard_theme_editor_changes();
+    log.addf("Theme saved to database: %s.", theme_catalog_.schemes[style_index_].name.c_str());
 }
 
 void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_registry)
@@ -566,7 +420,7 @@ void ShellUi::draw_settings_window(WindowManager& window_manager, ConsoleLog& lo
     }
 
     ImGui::SetNextWindowPos(ImVec2(200.0f, 150.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(270.0f, 170.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(310.0f, 215.0f), ImGuiCond_FirstUseEver);
 
     if (!imgui_begin_window_readable_caption("Settings", &show_settings_, ImGuiWindowFlags_NoResize)) {
         ImGui::End();
@@ -576,11 +430,19 @@ void ShellUi::draw_settings_window(WindowManager& window_manager, ConsoleLog& lo
 
     ImGui::SeparatorText("Appearance");
 
-    const char* style_names[] = { "Dark", "Light", "Classic", "Ocean", "Forest", "Sunset", "Win9x" };
-    const int style_name_count = static_cast<int>(sizeof(style_names) / sizeof(style_names[0]));
-    if (ImGui::Combo("Color scheme", &style_index_, style_names, style_name_count)) {
+    if (theme_catalog_.count > 0
+        && ImGui::Combo("Color scheme", &style_index_, theme_name_getter, &theme_catalog_, theme_catalog_.count)) {
         apply_style();
-        log.addf("Style changed to %s.", style_names[style_index_]);
+        load_theme_editor_from_selected_scheme();
+        log.addf("Style changed to %s.", theme_catalog_.schemes[style_index_].name.c_str());
+    }
+
+    if (theme_catalog_.count > 0) {
+        if (ImGui::Button("Open Theme Editor", ImVec2(-1.0f, 0.0f))) {
+            discard_theme_editor_changes();
+            show_theme_editor_ = true;
+            log.addf("Opened Theme Editor for %s.", theme_catalog_.schemes[style_index_].name.c_str());
+        }
     }
 
     if (ImGui::SliderFloat("Font scale", &font_scale_, 0.5f, 2.0f, "%.1f")) {
@@ -601,6 +463,62 @@ void ShellUi::draw_settings_window(WindowManager& window_manager, ConsoleLog& lo
     }
 
     ImGui::End();
+}
+
+void ShellUi::draw_theme_editor_window(WindowManager& window_manager, ConsoleLog& log)
+{
+    if (!show_theme_editor_) {
+        return;
+    }
+
+    bool keep_open = show_theme_editor_;
+    ImGui::SetNextWindowPos(ImVec2(220.0f, 70.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(760.0f, 640.0f), ImGuiCond_FirstUseEver);
+
+    if (!imgui_begin_window_readable_caption("Theme Editor", &keep_open)) {
+        ImGui::End();
+        show_theme_editor_ = keep_open;
+        if (!show_theme_editor_) {
+            discard_theme_editor_changes();
+        }
+        return;
+    }
+    show_theme_editor_ = keep_open;
+    window_manager.clear_focus_if_host_window_focused();
+
+    if (theme_catalog_.count <= 0 || style_index_ < 0 || style_index_ >= theme_catalog_.count) {
+        ImGui::TextDisabled("No themes available.");
+        ImGui::End();
+        return;
+    }
+
+    const std::string scheme_name = theme_catalog_.schemes[style_index_].name;
+    ImGui::Text("Editing scheme: %s", scheme_name.c_str());
+    ImGui::TextDisabled("Preview is live. Save writes the selected scheme back to the database.");
+
+    if (ImGui::ColorEdit3("Desktop clear color", theme_editor_clear_color_.data())) {
+        ::ImGui_ImplVK_SetClearColor(static_cast<unsigned int>(clamp_theme_color_byte(theme_editor_clear_color_[0])),
+                                     static_cast<unsigned int>(clamp_theme_color_byte(theme_editor_clear_color_[1])),
+                                     static_cast<unsigned int>(clamp_theme_color_byte(theme_editor_clear_color_[2])));
+    }
+
+    if (ImGui::Button("Save Theme", ImVec2(130.0f, 0.0f))) {
+        save_current_theme(log);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset Theme", ImVec2(130.0f, 0.0f))) {
+        discard_theme_editor_changes();
+        log.addf("Theme reset to saved values: %s.", scheme_name.c_str());
+    }
+
+    ImGui::Separator();
+    ImGui::ShowStyleEditor(&theme_editor_reference_style_);
+    ImGui::End();
+
+    if (!keep_open) {
+        show_theme_editor_ = false;
+        discard_theme_editor_changes();
+    }
 }
 
 void ShellUi::draw_about_modal()
@@ -670,6 +588,7 @@ void ShellUi::draw(PluginHost& plugin_host,
     panel_registry.draw_windows(plugin_host);
     plugin_host.window_manager.draw_windows();
     draw_settings_window(plugin_host.window_manager, plugin_host.log);
+    draw_theme_editor_window(plugin_host.window_manager, plugin_host.log);
     draw_about_modal();
     sync_settings(plugin_host.log);
 

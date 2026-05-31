@@ -69,21 +69,6 @@ int main(int /*argc*/, char** /*argv*/)
 
         ui.initialize(framebuffer, &log);
 
-        /* Performance tuning for the software rasterizer. */
-        ImGuiStyle& style = ImGui::GetStyle();
-        style.WindowRounding = 0.0f;
-        style.ChildRounding = 0.0f;
-        style.FrameRounding = 0.0f;
-        style.PopupRounding = 0.0f;
-        style.ScrollbarRounding = 0.0f;
-        style.GrabRounding = 0.0f;
-        style.TabRounding = 0.0f;
-        style.WindowBorderSize = 1.0f;
-        style.FrameBorderSize = 0.0f;
-        style.AntiAliasedLines = false;
-        style.AntiAliasedLinesUseTex = false;
-        style.AntiAliasedFill = false;
-
         log.add("vkGUI started.");
         log.addf("Framebuffer: %ux%u @ %s",
                  framebuffer.width,
