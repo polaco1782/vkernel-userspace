@@ -344,7 +344,7 @@ void browser_move_selection(RomBrowserState* browser, int delta)
 
 void render_rom_browser(AppState* app)
 {
-    if (app == nullptr || !refresh_framebuffer(app, nullptr) || app->present_buffer.empty())
+    if (app == nullptr || !refresh_framebuffer(app) || app->present_buffer.empty())
         return;
 
     RomBrowserState* browser = &app->browser;
@@ -550,10 +550,6 @@ bool browse_and_load_rom(AppState* app)
     browser_refresh_listing(app);
 
     while (!app->quit_requested) {
-        bool framebuffer_changed = false;
-        if (refresh_framebuffer(app, &framebuffer_changed) && framebuffer_changed)
-            dirty = true;
-
         if (dirty) {
             render_rom_browser(app);
             dirty = false;
@@ -603,7 +599,7 @@ bool browse_and_load_rom(AppState* app)
         }
 
         if (!saw_input) {
-            /* Block briefly so vkgui can remap the shared framebuffer safely. */
+            /* Sleep briefly so other tasks can run while the browser is idle. */
             VK_CALL(sleep, 1);
         }
     }

@@ -125,6 +125,7 @@ CORE_SRCS := \
 	$(SNES9X_DIR)/sa1cpu.cpp \
 	$(SNES9X_DIR)/cheats.cpp \
 	$(SNES9X_DIR)/sdd1emu.cpp \
+	$(SNES9X_DIR)/filter/hq2x.cpp \
 	$(SNES9X_DIR)/netplay.cpp \
 	$(SNES9X_DIR)/server.cpp \
 	$(SNES9X_DIR)/loadzip.cpp \

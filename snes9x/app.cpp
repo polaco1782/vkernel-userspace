@@ -90,7 +90,7 @@ bool refresh_framebuffer_state(AppState* app, bool* changed)
     if (framebuffer_changed) {
         const vk_usize pixels =
             static_cast<vk_usize>(app->framebuffer.stride) * app->framebuffer.height;
-        app->present_buffer.assign(pixels, 0u);
+        app->present_buffer.resize(pixels);
     }
 
     if (changed != nullptr)
@@ -198,6 +198,11 @@ void autosave_if_needed()
 }
 
 } // namespace
+
+bool refresh_framebuffer(AppState* app)
+{
+    return refresh_framebuffer_state(app, nullptr);
+}
 
 bool refresh_framebuffer(AppState* app, bool* changed)
 {

@@ -105,12 +105,14 @@ struct AppState {
     vk_framebuffer_info_t framebuffer {};
     std::vector<vk_u32> present_buffer;
     std::vector<vk_u32> converted_frame;
+    std::vector<uint16_t> filtered_frame;
     std::string loaded_rom_path;
     std::string rom_title;
     bool rom_loaded = false;
     bool quit_requested = false;
     bool reset_requested = false;
     bool loadrom_requested = false;
+    bool hq2x_ready = false;
     AudioState audio;
     TimingState timing;
     RomBrowserState browser;
@@ -130,7 +132,7 @@ void audio_reset(AppState* app);
 void audio_try_submit(AppState* app);
 void snes_audio_samples_available(AppState* app);
 
-bool refresh_framebuffer(AppState* app, bool* changed = nullptr);
+bool refresh_framebuffer(AppState* app);
 bool init_framebuffer(AppState* app);
 bool load_rom(AppState* app, const char* path);
 bool init_emulator(AppState* app);
