@@ -6,6 +6,9 @@
 #include "console_log.h"
 #include "implot.h"
 #include "kobj_panel.h"
+#include "deps/imguinotify/fa-solid-900.h"
+#include "deps/imguinotify/IconsFontAwesome6.h"
+#include "ImGuiNotify.hpp"
 #include "launch_registry.h"
 #include "plugin_registry.h"
 #include "shell_ui.h"
@@ -42,6 +45,25 @@ int main(int /*argc*/, char** /*argv*/)
         ImGuiIO& io = ImGui::GetIO();
         io.IniFilename = nullptr;
         io.LogFilename = nullptr;
+    }
+
+    /* Add FontAwesome 6 icons merged into the default font so ImGuiNotify
+     * can render its ✓ / ⚠ / ✗ / ℹ icons.  This must happen before
+     * ImGui_ImplVK_Init() which calls io.Fonts->Build() internally. */
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.Fonts->AddFontDefault();
+        constexpr float  base_size  = 16.0f;
+        constexpr float  icon_size  = base_size * 2.0f / 3.0f;
+        static constexpr ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
+        ImFontConfig icon_cfg;
+        icon_cfg.MergeMode        = true;
+        icon_cfg.PixelSnapH       = true;
+        icon_cfg.GlyphMinAdvanceX = icon_size;
+        io.Fonts->AddFontFromMemoryCompressedTTF(
+            fa_solid_900_compressed_data,
+            fa_solid_900_compressed_size,
+            icon_size, &icon_cfg, icon_ranges);
     }
 
     if (!ImGui_ImplVK_Init(&framebuffer)) {
@@ -123,6 +145,16 @@ int main(int /*argc*/, char** /*argv*/)
                     task_manager,
                     kobj_navigator,
                     vkfm_panel);
+
+            /* Render notifications with the active popup styling so they
+             * follow the selected theme instead of forcing a dark toast skin. */
+            const ImGuiStyle& style = ImGui::GetStyle();
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, style.PopupRounding);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, style.PopupBorderSize);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, style.Colors[ImGuiCol_PopupBg]);
+            ImGui::RenderNotifications();
+            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor(1);
 
             ImGui::Render();
             ImGui_ImplVK_RenderDrawData(ImGui::GetDrawData(), &framebuffer);

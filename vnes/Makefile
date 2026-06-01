@@ -10,7 +10,7 @@ CPP_DIR         := ../cpp
 CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
 VKGUI_DIR        := ../vkgui
-IMGUI_DIR       := $(VKGUI_DIR)/imgui
+IMGUI_DIR       := $(VKGUI_DIR)/deps/imgui
 BUILD_DIR       := build
 
 DEPFLAGS := -MMD -MP
@@ -109,14 +109,7 @@ TARGET := vnes.vbin
 
 .PHONY: all clean libc_build cpp_build
 
-all: _check_imgui _check_sysroot $(TARGET)
-
-_check_imgui:
-	@test -f $(IMGUI_DIR)/imgui.h || \
-	    { echo ""; \
-	      echo "  ERROR: ImGui sources not found in $(IMGUI_DIR)/"; \
-	      echo "  Run:  bash ../vkgui/setup_imgui.sh"; \
-	      echo ""; exit 1; }
+all: _check_sysroot $(TARGET)
 
 _check_sysroot:
 	@test -f $(SYSROOT)/include/stdio.h || \

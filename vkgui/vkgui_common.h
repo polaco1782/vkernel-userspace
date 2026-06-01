@@ -2,7 +2,7 @@
 #define VKGUI_COMMON_H
 
 #include "../include/vk.h"
-#include "imgui/imgui.h"
+#include "deps/imgui/imgui.h"
 #include "imgui_impl_vk.h"
 
 #include "vkernel/types.h"

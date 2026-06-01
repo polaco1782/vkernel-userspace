@@ -199,6 +199,35 @@ public:
         std::destroy_at(data_ + size_);
     }
 
+    iterator erase(iterator pos)
+    {
+        for (iterator it = pos; it + 1 != end(); ++it) {
+            *it = std::move(*(it + 1));
+        }
+        pop_back();
+        return pos;
+    }
+
+    iterator erase(const_iterator pos)
+    {
+        return erase(begin() + (pos - begin()));
+    }
+
+    iterator erase(iterator first, iterator last)
+    {
+        const size_type count = static_cast<size_type>(last - first);
+        if (count == 0) {
+            return first;
+        }
+        iterator dst = first;
+        for (iterator src = last; src != end(); ++dst, ++src) {
+            *dst = std::move(*src);
+        }
+        destroy_range(dst, static_cast<size_type>(end() - dst));
+        size_ -= count;
+        return first;
+    }
+
     void swap(vector& other) noexcept
     {
         std::swap(allocator_, other.allocator_);

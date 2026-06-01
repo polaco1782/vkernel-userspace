@@ -2,7 +2,7 @@
 #include "plugin_registry.h"
 
 #include "console_log.h"
-#include "imgui/imgui.h"
+#include "deps/imgui/imgui.h"
 
 #include <new>
 #include <string.h>

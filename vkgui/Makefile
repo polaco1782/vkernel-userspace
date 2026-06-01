@@ -3,11 +3,9 @@
 #
 # Builds a static PIE binary linked against newlib + vkernel CRT.
 #
-# Prerequisites (one-time setup):
+# Prerequisites:
 #   1.  Run  scripts/setup_newlib.sh   from the project root.
 #   2.  Run  make -C ../libc           to build crt0 + libvksys.
-#   3.  Run  bash setup_imgui.sh       to download Dear ImGui sources.
-#   4.  Run  bash setup_implot.sh      to download ImPlot sources.
 #
 # Then just:   make          (release)
 #              make DEBUG=1  (debug, keeps symbols and -Og)
@@ -24,9 +22,10 @@ LIBC_DIR        := ../libc
 CPP_DIR         := ../cpp
 CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
-IMGUI_DIR       := ./imgui
-IMPLOT_DIR      := ./implot
+IMGUI_DIR       := ./deps/imgui
+IMPLOT_DIR      := ./deps/implot
 SQLITE_DIR      := ./deps/sqlite3
+NOTIFY_DIR      := ./deps/imguinotify
 PLUGIN_DIR      := ./plugins
 RUNTIME_PLUGIN_DIR := ./runtime_plugins
 
@@ -57,7 +56,10 @@ CXXFLAGS  += -I$(KERNEL_INCLUDE)
 CXXFLAGS  += -I$(IMGUI_DIR)
 CXXFLAGS  += -I$(IMPLOT_DIR)
 CXXFLAGS  += -I$(SQLITE_DIR)
+CXXFLAGS  += -I$(NOTIFY_DIR)
 CXXFLAGS  += -I.
+# Disable multi-viewport notification positioning (requires docking branch)
+CXXFLAGS  += -DNOTIFY_RENDER_OUTSIDE_MAIN_WINDOW=0
 # Tell every TU (including ImGui) to pick up our config header
 CXXFLAGS  += -DIMGUI_USER_CONFIG=\"imgui_config.h\"
 
@@ -190,28 +192,26 @@ help:
 	@echo "  make              – release build"
 	@echo "  make DEBUG=1      – debug build"
 	@echo "  make clean        – remove objects and binary"
-	@echo "  make distclean    – also remove downloaded ImGui sources"
+	@echo "  make distclean    – clean build outputs (vendored deps are kept)"
 	@echo ""
-	@echo "First-time setup:"
-	@echo "  bash setup_imgui.sh   – download Dear ImGui sources"
-	@echo "  bash setup_implot.sh  – download ImPlot sources"
-	@echo "  make -C ../libc       – build newlib glue (crt0, libvksys)"
-	@echo "  make -C ../cpp        – build the freestanding C++ runtime (optional; auto-built here)"
+	@echo "Required setup:"
+	@echo "  make -C ../libc             – build newlib glue (crt0, libvksys)"
+	@echo "  make -C ../cpp              – build the freestanding C++ runtime (optional; auto-built here)"
 
 # ---- Dependency guards --------------------------------------------------
 
 _check_imgui:
 	@test -f $(IMGUI_DIR)/imgui.h || \
 	    { echo ""; \
-	      echo "  ERROR: ImGui sources not found in $(IMGUI_DIR)/"; \
-	      echo "  Run:  bash setup_imgui.sh"; \
+	      echo "  ERROR: vendored ImGui sources not found in $(IMGUI_DIR)/"; \
+	      echo "  Restore the tracked deps/imgui/ tree."; \
 	      echo ""; exit 1; }
 
 _check_implot:
 	@test -f $(IMPLOT_DIR)/implot.h || \
 	    { echo ""; \
-	      echo "  ERROR: ImPlot sources not found in $(IMPLOT_DIR)/"; \
-	      echo "  Run:  bash setup_implot.sh"; \
+	      echo "  ERROR: vendored ImPlot sources not found in $(IMPLOT_DIR)/"; \
+	      echo "  Restore the tracked deps/implot/ tree."; \
 	      echo ""; exit 1; }
 
 _check_sysroot:
@@ -276,8 +276,6 @@ clean:
 	@echo "  cleaned."
 
 distclean: clean
-	@rm -rf imgui/
-	@rm -rf implot/
-	@echo "  imgui/ and implot/ removed."
+	@echo "  vendored deps preserved."
 
 -include $(ALL_DEPS)

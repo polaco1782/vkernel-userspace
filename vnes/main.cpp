@@ -1,6 +1,6 @@
 #include "frontend.h"
 
-#include "../vkgui/imgui/imgui.h"
+#include "../vkgui/deps/imgui/imgui.h"
 #include "../vkgui/imgui_impl_vk.h"
 
 #include <iostream>

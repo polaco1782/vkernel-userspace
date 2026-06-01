@@ -3,7 +3,7 @@
 #include "disasm.h"
 #include "util.h"
 
-#include "../vkgui/imgui/imgui.h"
+#include "../vkgui/deps/imgui/imgui.h"
 #include "../vkgui/imgui_impl_vk.h"
 
 #include <cstdio>

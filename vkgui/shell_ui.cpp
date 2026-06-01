@@ -1,6 +1,7 @@
 #include "shell_ui.h"
 
 #include "console_log.h"
+#include "ImGuiNotify.hpp"
 #include "kobj_panel.h"
 #include "launch_registry.h"
 #include "plugin_registry.h"
@@ -38,6 +39,13 @@ auto clamp_theme_color_byte(float value) -> int
     }
     return static_cast<int>(value * 255.0f + 0.5f);
 }
+
+void push_notification(ImGuiToastType type, int dismiss_time_ms, const std::string& message)
+{
+    ImGuiToast toast(type, dismiss_time_ms);
+    toast.setContent("%s", message.c_str());
+    ImGui::InsertNotification(toast);
+}
 } // namespace
 
 void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* log)
@@ -64,10 +72,12 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
                 theme_catalog_ = loaded_themes;
             } else if (log != nullptr) {
                 log->add("vkGUI settings: theme catalog was empty; using built-in defaults.");
+                push_notification(ImGuiToastType::Warning, 5000, "Theme catalog was empty. Using built-in defaults.");
             }
         } else if (log != nullptr) {
             log->addf("vkGUI settings: failed to load color schemes from /data/vkgui/vkgui_settings.db (%s); using built-in defaults.",
                       settings_store_.last_error().c_str());
+            push_notification(ImGuiToastType::Warning, 5000, "Failed to load theme catalog. Using built-in defaults.");
         }
 
         PersistedSettings settings = current_settings_snapshot();
@@ -81,10 +91,12 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
         } else if (log != nullptr) {
             log->addf("vkGUI settings: failed to load /data/vkgui/vkgui_settings.db (%s).",
                       settings_store_.last_error().c_str());
+            push_notification(ImGuiToastType::Warning, 5000, "Failed to load saved settings. Using current defaults.");
         }
     } else if (log != nullptr) {
         log->addf("vkGUI settings: failed to open /data/vkgui/vkgui_settings.db (%s).",
                   settings_store_.last_error().c_str());
+        push_notification(ImGuiToastType::Error, 0, "Settings database could not be opened.");
     }
 
     ImGui_ImplVK_SetTransparencyEnabled(transparency_);
@@ -224,12 +236,14 @@ void ShellUi::save_current_theme(ConsoleLog& log)
     if (!settings_store_.save_theme_catalog(updated_catalog)) {
         log.addf("vkGUI settings: failed to save themes to /data/vkgui/vkgui_settings.db (%s).",
                  settings_store_.last_error().c_str());
+        push_notification(ImGuiToastType::Error, 0, "Failed to save theme.");
         return;
     }
 
     theme_catalog_ = updated_catalog;
     discard_theme_editor_changes();
     log.addf("Theme saved to database: %s.", theme_catalog_.schemes[style_index_].name.c_str());
+    push_notification(ImGuiToastType::Success, 3000, "Theme saved.");
 }
 
 void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_registry)
@@ -280,6 +294,7 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
     if (ImGui::BeginMenu("Launch")) {
         if (ImGui::MenuItem("Refresh App List")) {
             launch_registry.refresh(log);
+            push_notification(ImGuiToastType::Success, 3000, "App list refreshed.");
         }
 
         ImGui::Separator();
@@ -568,6 +583,7 @@ void ShellUi::sync_settings(ConsoleLog& log)
         log.addf("vkGUI settings: failed to save /data/vkgui/vkgui_settings.db (%s).",
                  settings_store_.last_error().c_str());
         settings_store_ready_ = false;
+        push_notification(ImGuiToastType::Warning, 5000, "Settings autosave failed and was disabled.");
         return;
     }
 

@@ -16,7 +16,7 @@
 #pragma once
 
 #include "../include/vk.h"  /* vk_framebuffer_info_t, vk_key_event_t, … */
-#include "imgui/imgui.h"
+#include "deps/imgui/imgui.h"
 
 /* ---- Lifecycle ---- */
 

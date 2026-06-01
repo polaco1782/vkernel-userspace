@@ -1,7 +1,7 @@
 #include "window_manager.h"
 
 #include "console_log.h"
-#include "imgui/imgui_internal.h"
+#include "deps/imgui/imgui_internal.h"
 
 #include <new>
 #include <stdio.h>

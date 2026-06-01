@@ -136,9 +136,6 @@ $(ROTOZOOM_VBIN): FORCE rotozoom/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C rotozoom CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
 $(VKGUI_VBIN): FORCE $(wildcard vkgui/*.cpp) vkgui/Makefile libc-glue
-	@test -f vkgui/imgui/imgui.h || \
-	    (echo "  IMGUI   Downloading Dear ImGui for vkgui..."; \
-	     bash vkgui/setup_imgui.sh)
 	@$(MAKE) --no-print-directory -C vkgui $(_DEBUG_FLAG)
 
 $(SR_CUBE_VBIN): FORCE sr_cube/Makefile libc-glue
@@ -151,9 +148,6 @@ $(VKOBJ_VBIN): FORCE vkobj/main.cpp vkobj/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C vkobj $(_DEBUG_FLAG)
 
 $(VNES_VBIN): FORCE $(wildcard vnes/*.cpp) vnes/Makefile libc-glue
-	@test -f vkgui/imgui/imgui.h || \
-	    (echo "  IMGUI   Downloading Dear ImGui for vnes..."; \
-	     bash vkgui/setup_imgui.sh)
 	@$(MAKE) --no-print-directory -C vnes $(_DEBUG_FLAG)
 
 $(SNES9X_VBIN): FORCE snes9x/Makefile libc-glue
