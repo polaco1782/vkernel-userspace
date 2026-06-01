@@ -33,6 +33,7 @@ CPPCOMPAT_VBIN := cppcompat/cppcompat.vbin
 VKOBJ_VBIN := vkobj/vkobj.vbin
 VNES_VBIN := vnes/vnes.vbin
 SNES9X_VBIN := snes9x/snes9x.vbin
+VSPCPLAY_VBIN := vspcplay/vspcplay.vbin
 
 USERSPACE_BINARIES := $(USERSPACE_BINARY_RELATIVE)
 
@@ -57,6 +58,7 @@ USERSPACE_STAGE_ASSETS += $(wildcard quake/reaperfx)
 USERSPACE_STAGE_ASSETS += $(wildcard clownmdemu/roms)
 USERSPACE_STAGE_ASSETS += $(wildcard vnes/roms)
 USERSPACE_STAGE_ASSETS += $(wildcard snes9x/roms)
+USERSPACE_STAGE_ASSETS += $(wildcard vspcplay/tracks)
 USERSPACE_STAGE_ASSETS += $(wildcard minimp3/tracks)
 
 USERSPACE_BUILD_OUTPUTS := $(USERSPACE_BINARIES)
@@ -153,6 +155,9 @@ $(VNES_VBIN): FORCE $(wildcard vnes/*.cpp) vnes/Makefile libc-glue
 $(SNES9X_VBIN): FORCE snes9x/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C snes9x CXX=$(CROSS_PREFIX)g++ CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
+$(VSPCPLAY_VBIN): FORCE vspcplay/Makefile libc-glue
+	@$(MAKE) --no-print-directory -C vspcplay CXX=$(CROSS_PREFIX)g++ CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
+
 FORCE:
 
 clean:
@@ -176,6 +181,7 @@ clean:
 	@$(MAKE) --no-print-directory -C vkgui clean
 	@$(MAKE) --no-print-directory -C vnes clean
 	@$(MAKE) --no-print-directory -C snes9x clean
+	@$(MAKE) --no-print-directory -C vspcplay clean
 	@$(MAKE) --no-print-directory -C sr_cube clean
 
 distclean: clean

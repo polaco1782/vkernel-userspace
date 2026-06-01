@@ -15,4 +15,5 @@ USERSPACE_BINARY_RELATIVE := \
 	cppcompat/cppcompat.vbin \
 	vkobj/vkobj.vbin \
 	vnes/vnes.vbin \
-	snes9x/snes9x.vbin
+	snes9x/snes9x.vbin \
+	vspcplay/vspcplay.vbin
