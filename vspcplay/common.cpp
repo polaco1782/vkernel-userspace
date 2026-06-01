@@ -159,7 +159,8 @@ void print_help()
         << "  --novideo               Disable framebuffer UI\n"
         << "  --waveout file.wav      Write a WAV alongside playback\n"
         << "  --interpolation         Enable SPC interpolation\n"
-        << "  --echo                  Enable echo\n"
+        << "  --echo                  Enable echo (default)\n"
+        << "  --no-echo               Disable echo\n"
         << "  --status_line           Print a live status line\n"
         << "  --default_time seconds  Default song time when no tag is present\n"
         << "  --ignore_tag_time       Ignore the ID666 play time\n"
@@ -233,6 +234,10 @@ auto parse_args(AppState* app, int argc, char** argv) -> bool
         }
         if (strcmp(arg, "--echo") == 0) {
             app->config.echo = true;
+            continue;
+        }
+        if (strcmp(arg, "--no-echo") == 0) {
+            app->config.echo = false;
             continue;
         }
         if (strcmp(arg, "--status_line") == 0) {

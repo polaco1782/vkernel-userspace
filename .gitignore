@@ -36,3 +36,4 @@ quake/pak0.pak
 vnes/roms/
 snes9x/roms/
 .build/userspace-debug.stamp
+vspcplay/tracks/

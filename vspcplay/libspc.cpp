@@ -1,97 +1,155 @@
-
-#include <stdio.h>
-
-#include "snes9x.h"
-#include "port.h"
-#include "apu.h"
-#include "soundux.h"
 #include "libspc.h"
 
-#define RATE 100
+#include "../snes9x-src/apu/apu.h"
+#include "../snes9x-src/apu/bapu/snes/snes.hpp"
+#include "../snes9x-src/msu1.h"
+#include "spc_backend.h"
 
-SAPURegisters BackupAPURegisters;
-unsigned char BackupAPURAM[65536];
-unsigned char BackupAPUExtraRAM[64];
-unsigned char BackupDSPRAM[128];
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-int samples_per_mix;
+namespace {
 
+constexpr int kMixRate = 100;
+constexpr uint64_t kNtscMasterClockNumerator = 236250000ull;
+constexpr uint64_t kNtscMasterClockDenominator = 11ull * kMixRate;
+constexpr uint8 kEchoEnableReg = 0x4d;
+constexpr uint8 kEchoVolumeLeftReg = 0x2c;
+constexpr uint8 kEchoVolumeRightReg = 0x3c;
 
-// The callback
+struct SpcFile {
+    unsigned char header[33];
+    unsigned char idtag[3];
+    unsigned char version_minor;
+    unsigned char pc_low;
+    unsigned char pc_high;
+    unsigned char a;
+    unsigned char x;
+    unsigned char y;
+    unsigned char psw;
+    unsigned char sp;
+    unsigned char unused_a[2];
+    unsigned char id666[210];
+    unsigned char apuram[65536];
+    unsigned char dsp_registers[128];
+    unsigned char unused_b[64];
+    unsigned char iplrom[64];
+};
 
-static void DoTimer (void)
+SPC_Config g_config = { 44100, 16, 2, 0, 0 };
+int g_samples_per_mix = 0;
+int g_buffer_size_bytes = 0;
+uint64_t g_cpu_cycle_fraction = 0;
+
+void configure_settings(const SPC_Config& config)
 {
-  APURegisters.PC = IAPU.PC - IAPU.RAM;
-//   S9xAPUPackStatus ();
+    memset(&Settings, 0, sizeof(Settings));
+    memset(&CPU, 0, sizeof(CPU));
+    memset(&Timings, 0, sizeof(Timings));
+    memset(&SNESGameFixes, 0, sizeof(SNESGameFixes));
+    memset(&Registers, 0, sizeof(Registers));
+    memset(&MSU1, 0, sizeof(MSU1));
+    memset(String, 0, sizeof(String));
 
-//   if (IAPU.APUExecuting)
-//     APU.Cycles -= 90;//Settings.H_Max;
-//   else
-//     APU.Cycles = 0;
+    Settings.Stereo = config.channels == 2 ? TRUE : FALSE;
+    Settings.SixteenBitSound = config.resolution == 16 ? TRUE : FALSE;
+    Settings.SoundPlaybackRate = config.sampling_rate;
+    Settings.SoundInputRate = 32040;
+    Settings.SoundSync = FALSE;
+    Settings.DynamicRateControl = FALSE;
+    Settings.Mute = FALSE;
+    Settings.PAL = FALSE;
+    Settings.MSU1 = FALSE;
+    Settings.ReverseStereo = FALSE;
+    Settings.InterpolationMethod =
+        config.is_interpolation ? DSP_INTERPOLATION_GAUSSIAN : DSP_INTERPOLATION_NONE;
+    Settings.OneClockCycle = 6;
+    Settings.OneSlowClockCycle = 8;
+    Settings.TwoClockCycles = 12;
 
-	// Update Timer 2 (64 kHz) every cycle
-  if (APU.TimerEnabled [2]) {
-#if 1 // WinSPC
-      APU.Timer [2] ++;
-#else // snes9x
-      APU.Timer [2] += 4;
-#endif
-      if (APU.Timer [2] >= APU.TimerTarget [2]) {
-	  IAPU.RAM [0xff] = (IAPU.RAM [0xff] + 1) & 0xf;
-#if 1  // WinSPC
- 	  APU.Timer [2] = 0;
-#else  // snes9x
-	  APU.Timer [2] -= APU.TimerTarget [2];
-#endif
-#ifdef SPC700_SHUTDOWN          
-	  IAPU.WaitCounter++;
-	  IAPU.APUExecuting = TRUE;
-#endif          
+    Timings.H_Max = SNES_CYCLES_PER_SCANLINE;
+    Timings.V_Max = SNES_MAX_NTSC_VCOUNTER;
 
-	}
-    }
-  
-	// Update Timers 0 and 1 (8 kHz) every 8 calls. (this is 8 times
-	// slower than timer 22, which updates on every call.
-	//
-	// TimerErrorCounter is incremented in SPC_update, before the DoTimer()
-	// call.
-  if (IAPU.TimerErrorCounter >= 8)
-    {
-      IAPU.TimerErrorCounter = 0;
-      if (APU.TimerEnabled [0])
-	{
-	  APU.Timer [0]++;
-	  if (APU.Timer [0] >= APU.TimerTarget [0])
-	    {
-	      IAPU.RAM [0xfd] = (IAPU.RAM [0xfd] + 1) & 0xf;
-	      APU.Timer [0] = 0;
-#ifdef SPC700_SHUTDOWN          
-	      IAPU.WaitCounter++;
-	      IAPU.APUExecuting = TRUE;
-#endif          
-
-	    }
-	}
-      if (APU.TimerEnabled [1])
-	{
-	  APU.Timer [1]++;
-	  if (APU.Timer [1] >= APU.TimerTarget [1])
-	    {
-	      IAPU.RAM [0xfe] = (IAPU.RAM [0xfe] + 1) & 0xf;
-	      APU.Timer [1] = 0;
-#ifdef SPC700_SHUTDOWN          
-	      IAPU.WaitCounter++;
-	      IAPU.APUExecuting = TRUE;
-#endif          
-	    }
-	}
-    }
+    S9xAPUTimingSetSpeedup(0);
 }
 
-/* ================================================================ */
+void apply_echo_preference(void)
+{
+    if (g_config.is_echo)
+        return;
 
-START_EXTERN_C
+    SNES::dsp.spc_dsp.write(kEchoEnableReg, 0x00);
+    SNES::dsp.spc_dsp.write(kEchoVolumeLeftReg, 0x00);
+    SNES::dsp.spc_dsp.write(kEchoVolumeRightReg, 0x00);
+}
+
+void run_apu_batch(void)
+{
+    const uint64_t scaled_cycles = g_cpu_cycle_fraction + kNtscMasterClockNumerator;
+    const int32 cpu_cycles = static_cast<int32>(scaled_cycles / kNtscMasterClockDenominator);
+    g_cpu_cycle_fraction = scaled_cycles % kNtscMasterClockDenominator;
+
+    CPU.Cycles = cpu_cycles;
+    S9xAPUExecute();
+    SNES::dsp.synchronize();
+    CPU.Cycles = 0;
+    S9xAPUSetReferenceTime(0);
+}
+
+void restore_spc(const SpcFile& spc)
+{
+    memcpy(SNES::smp.apuram, spc.apuram, sizeof(spc.apuram));
+    SNES::cpu.reset();
+
+    SNES::smp.clock = 0;
+    SNES::dsp.clock = 0;
+    SNES::smp.opcode_number = 0;
+    SNES::smp.opcode_cycle = 0;
+    SNES::smp.rd = 0;
+    SNES::smp.wr = 0;
+    SNES::smp.dp = 0;
+    SNES::smp.sp = 0;
+    SNES::smp.ya = 0;
+    SNES::smp.bit = 0;
+
+    SNES::smp.regs.pc = static_cast<uint16>(spc.pc_low | (spc.pc_high << 8));
+    SNES::smp.regs.sp = spc.sp;
+    SNES::smp.regs.B.a = spc.a;
+    SNES::smp.regs.x = spc.x;
+    SNES::smp.regs.B.y = spc.y;
+    SNES::smp.regs.p = spc.psw;
+
+    SNES::smp.timer0.stage1_ticks = 0;
+    SNES::smp.timer1.stage1_ticks = 0;
+    SNES::smp.timer2.stage1_ticks = 0;
+    SNES::smp.timer0.stage2_ticks = 0;
+    SNES::smp.timer1.stage2_ticks = 0;
+    SNES::smp.timer2.stage2_ticks = 0;
+
+    SNES::dsp.spc_dsp.restore_spc_file(spc.dsp_registers);
+
+    SNES::smp.mmio_write(0xf1, spc.apuram[0xf1]);
+    SNES::smp.mmio_write(0xf2, spc.apuram[0xf2]);
+    SNES::smp.mmio_write(0xf8, spc.apuram[0xf8]);
+    SNES::smp.mmio_write(0xf9, spc.apuram[0xf9]);
+    SNES::smp.mmio_write(0xfa, spc.apuram[0xfa]);
+    SNES::smp.mmio_write(0xfb, spc.apuram[0xfb]);
+    SNES::smp.mmio_write(0xfc, spc.apuram[0xfc]);
+    SNES::smp.timer0.stage3_ticks = spc.apuram[0xfd] & 0x0f;
+    SNES::smp.timer1.stage3_ticks = spc.apuram[0xfe] & 0x0f;
+    SNES::smp.timer2.stage3_ticks = spc.apuram[0xff] & 0x0f;
+
+    S9xClearSamples();
+    S9xSetSoundMute(FALSE);
+    apply_echo_preference();
+    vspcplay_apply_voice_mute_mask();
+}
+
+} // namespace
+
+extern "C" {
 
 int SPC_init(SPC_Config *cfg)
 {
@@ -105,353 +163,183 @@ void SPC_close(void)
 
 int SPC_set_state(SPC_Config *cfg)
 {
-    int i;
+    if (cfg != nullptr)
+        g_config = *cfg;
 
-    Settings.APUEnabled = TRUE;
-    Settings.InterpolatedSound = (cfg->is_interpolation) ? TRUE : FALSE;
-    Settings.SoundEnvelopeHeightReading = TRUE;
-    Settings.DisableSoundEcho = (cfg->is_echo) ? FALSE : TRUE;
-    //   Settings.EnableExtraNoise = TRUE;
-	Settings.ReverseStereo = 0;
-	Settings.AltSampleDecode = 0;
+    g_cpu_cycle_fraction = 0;
+    g_samples_per_mix = (g_config.sampling_rate / kMixRate) * g_config.channels;
+    g_buffer_size_bytes = g_samples_per_mix;
+    if (g_config.resolution == 16)
+        g_buffer_size_bytes *= static_cast<int>(sizeof(int16));
 
-    // SPC mixer information
-    //samples_per_mix = cfg->sampling_rate / RATE * cfg->channels;
-    samples_per_mix = cfg->sampling_rate / RATE * cfg->channels;
-    so.playback_rate = cfg->sampling_rate;
-    so.err_rate = (uint32)(SNES_SCANLINE_TIME * 0x10000UL / (1.0 / (double) so.playback_rate));
-    S9xSetEchoDelay(APU.DSP [APU_EDL] & 0xf);
-    for (i = 0; i < 8; i++)
-	S9xSetSoundFrequency(i, SoundData.channels [i].hertz);
-    so.buffer_size = samples_per_mix;
-    so.stereo = (cfg->channels == 2) ? TRUE : FALSE;
-
-    if (cfg->resolution == 16){
-        so.buffer_size *= 2;
-        so.sixteen_bit = TRUE;
-    } else
-        so.sixteen_bit = FALSE;
-    
-    so.encoded = FALSE;
-    so.mute_sound = FALSE;
-
-    return so.buffer_size;
+    configure_settings(g_config);
+    S9xInitAPU();
+    if (!S9xInitSound(0))
+        return 0;
+    S9xResetAPU();
+    return g_buffer_size_bytes;
 }
 
-/* get samples
-   ---------------------------------------------------------------- */
 void SPC_update(unsigned char *buf)
 {
-    // APU_LOOP
-    int c, ic;
+    if (buf == nullptr || g_samples_per_mix <= 0)
+        return;
 
-#if 1
-    for (c = 0; c < 2048000 / 32 / RATE; c ++) {
-        for (ic = 0; ic < 32; ic ++)
-            APU_EXECUTE1(); IAPU.TimerErrorCounter ++; DoTimer();
-    }
-#else
-    for (APU.Cycles = 0; APU.Cycles < 204800 / RATE; APU.Cycles ++) {
-        APU_EXECUTE1();
-        ++ IAPU.TimerErrorCounter;
-        if ((IAPU.TimerErrorCounter & 31) == 0)
-            DoTimer();
-        APURegisters.PC = IAPU.PC - IAPU.RAM;
-        S9xAPUPackStatus();
-    }
-#endif
+    while (S9xGetSampleCount() < g_samples_per_mix)
+        run_apu_batch();
 
-    S9xMixSamples ((unsigned char *)buf, samples_per_mix);
+    if (!S9xMixSamples(buf, g_samples_per_mix))
+        memset(buf, 0, static_cast<size_t>(g_buffer_size_bytes));
 }
 
-/* Restore SPC state
-   ---------------------------------------------------------------- */
-static void RestoreSPC()
+int SPC_load(const char *fname)
 {
-    int i;
-
-    APURegisters.PC = BackupAPURegisters.PC;
-    APURegisters.YA.B.A = BackupAPURegisters.YA.B.A;
-    APURegisters.X = BackupAPURegisters.X;
-    APURegisters.YA.B.Y = BackupAPURegisters.YA.B.Y;
-    APURegisters.P = BackupAPURegisters.P;
-    APURegisters.S = BackupAPURegisters.S;
-    memcpy (IAPU.RAM, BackupAPURAM, 65536);
-    memcpy (APU.ExtraRAM, BackupAPUExtraRAM, 64);
-    memcpy (APU.DSP, BackupDSPRAM, 128);
-
-    for (i = 0; i < 4; i ++)
-    {
-        APU.OutPorts[i] = IAPU.RAM[0xf4 + i];
-    }
-    IAPU.TimerErrorCounter = 0;
-
-    for (i = 0; i < 3; i ++)
-    {
-        if (IAPU.RAM[0xfa + i] == 0)
-            APU.TimerTarget[i] = 0x100;
-        else
-            APU.TimerTarget[i] = IAPU.RAM[0xfa + i];
-    }
-
-    S9xSetAPUControl (IAPU.RAM[0xf1]);
-
-  /* from snaporig.cpp (ReadOrigSnapshot) */
-    S9xSetSoundMute (FALSE);
-    IAPU.PC = IAPU.RAM + APURegisters.PC;
-    S9xAPUUnpackStatus ();
-    if (APUCheckDirectPage ())
-        IAPU.DirectPage = IAPU.RAM + 0x100;
-    else
-        IAPU.DirectPage = IAPU.RAM;
-    Settings.APUEnabled = TRUE;
-    IAPU.APUExecuting = TRUE;
-
-    S9xFixSoundAfterSnapshotLoad ();
-
-    S9xSetFrequencyModulationEnable (APU.DSP[APU_PMON]);
-    S9xSetMasterVolume (APU.DSP[APU_MVOL_LEFT], APU.DSP[APU_MVOL_RIGHT]);
-    S9xSetEchoVolume (APU.DSP[APU_EVOL_LEFT], APU.DSP[APU_EVOL_RIGHT]);
-
-    uint8 mask = 1;
-    int type;
-    for (i = 0; i < 8; i++, mask <<= 1) {
-        //Channel *ch = &SoundData.channels[i];
-      
-        S9xFixEnvelope (i,
-                        APU.DSP[APU_GAIN + (i << 4)],
-                        APU.DSP[APU_ADSR1 + (i << 4)],
-                        APU.DSP[APU_ADSR2 + (i << 4)]);
-        S9xSetSoundVolume (i,
-                           APU.DSP[APU_VOL_LEFT + (i << 4)],
-                           APU.DSP[APU_VOL_RIGHT + (i << 4)]);
-        S9xSetSoundHertz (i, ((APU.DSP[APU_P_LOW + (i << 4)]
-                                   + (APU.DSP[APU_P_HIGH + (i << 4)] << 8))
-                                  & FREQUENCY_MASK) * 8);
-        if (APU.DSP [APU_NON] & mask)
-            type = SOUND_NOISE;
-        else
-            type = SOUND_SAMPLE;
-        S9xSetSoundType (i, type);
-        if ((APU.DSP[APU_KON] & mask) != 0)
-	{
-            APU.KeyedChannels |= mask;
-            S9xPlaySample (i);
-	}
-    }
-
-#if 0
-    unsigned char temp=IAPU.RAM[0xf2];
-    for(i=0;i<128;i++){
-        IAPU.RAM[0xf2]=i;
-        S9xSetAPUDSP(APU.DSP[i]);
-    }
-    IAPU.RAM[0xf2]=temp;
-#endif
-}
-
-/* Load SPC file [CLEANUP]
-   ---------------------------------------------------------------- */
-int SPC_load (const char *fname)
-{
-    FILE *fp;
-    //char temp[64];
-
-    S9xInitAPU();
-
-    fp = fopen (fname, "rb");
-    if (!fp) {
+    FILE *fp = fopen(fname, "rb");
+    if (fp == nullptr)
         return FALSE;
-	}
- 
-	if (!SPC_loadFP(fp)) { 
-    	fclose(fp);
-		return FALSE;
-	}
-	
+
+    const int loaded = SPC_loadFP(fp);
     fclose(fp);
-    return TRUE;
+    return loaded;
 }
 
 int SPC_loadFP(FILE *fp)
 {
-    char temp[64];
-	unsigned char a, b;
-
-    S9xInitAPU();
-
-    if (!fp)
+    if (fp == nullptr)
         return FALSE;
-  
+
+    SpcFile spc = {};
+    rewind(fp);
+    if (fread(&spc, 1, sizeof(spc), fp) != sizeof(spc))
+        return FALSE;
+
     S9xResetAPU();
-
-    fseek(fp, 0x25, SEEK_SET);
-   
-	fread(&a, 1, 1, fp);
-	fread(&b, 1, 1, fp);
-	BackupAPURegisters.PC = (b << 8) | a;
-//	fread(&BackupAPURegisters.PC, 1, 2, fp);
-	
-    fread(&BackupAPURegisters.YA.B.A, 1, 1, fp);
-    fread(&BackupAPURegisters.X, 1, 1, fp);
-    fread(&BackupAPURegisters.YA.B.Y, 1, 1, fp);
-    fread(&BackupAPURegisters.P, 1, 1, fp);
-    fread(&BackupAPURegisters.S, 1, 1, fp);
-
-    fseek(fp, 0x100, SEEK_SET);
-    fread(BackupAPURAM, 1, 0x10000, fp);
-    fread(BackupDSPRAM, 1, 128, fp);
-    fread(temp, 1, 64, fp);
-    fread(BackupAPUExtraRAM, 1, 64, fp);
-
-    RestoreSPC();
-    IAPU.OneCycle = ONE_APU_CYCLE;
-
+    restore_spc(spc);
     return TRUE;
 }
 
-
-/* ID666
-   ---------------------------------------------------------------- */
-SPC_ID666 *SPC_get_id666 (const char *filename)
+SPC_ID666 *SPC_get_id666(const char *filename)
 {
-  FILE *fp;
-  SPC_ID666 *id666;
+    FILE *fp = fopen(filename, "rb");
+    if (fp == NULL)
+        return NULL;
 
-  fp = fopen(filename, "rb");
-  if (fp == NULL) {
-      return NULL;
-  }
-
-  id666 = SPC_get_id666FP(fp);
-
-  fclose(fp);
-
-  return id666;
+    SPC_ID666 *id666 = SPC_get_id666FP(fp);
+    fclose(fp);
+    return id666;
 }
 
-/* Binary tags only!!! */
-SPC_ID666 *SPC_get_id666FP (FILE *fp)
+SPC_ID666 *SPC_get_id666FP(FILE *fp)
 {
-  SPC_ID666 *id;
-  unsigned char playtime_str[4] = { 0, 0, 0, 0 };
-//  unsigned char fadetime_str[5] = { 0, 0, 0, 0, 0 };
- 
-  
-  id = (SPC_ID666 *)malloc(sizeof(*id));
-  if (id == NULL)
-    return NULL;
-  
-  fseek(fp, 0x23, SEEK_SET);
-  if (fgetc(fp) == 27) {
-      //fclose(fp);
-      free(id);
-      return NULL;
-  }
+    SPC_ID666 *id = (SPC_ID666 *)malloc(sizeof(*id));
+    unsigned char playtime_str[4] = { 0, 0, 0, 0 };
+    if (id == NULL)
+        return NULL;
 
-  fseek(fp, 0x2E, SEEK_SET);
-  fread(id->songname, 1, 32, fp);
-  id->songname[32] = '\0';
-
-  fread(id->gametitle, 1, 32, fp);
-  id->gametitle[32] = '\0';
-
-  fread(id->dumper, 1, 16, fp);
-  id->dumper[16] = '\0';
-
-  fread(id->comments, 1, 32, fp);
-  id->comments[32] = '\0';
-
-  fseek(fp, 0xA9, SEEK_SET);
-  fread(playtime_str, 1, 3, fp);
-  id->playtime = atoi((char*)playtime_str);
- 
-  fseek(fp, 0xD1, SEEK_SET);
-  switch (fgetc (fp)) {
-  case 1:
-      id->emulator = SPC_EMULATOR_ZSNES;
-      break;
-  case 2:
-      id->emulator = SPC_EMULATOR_SNES9X;
-      break;
-  case 0:
-  default:
-      id->emulator = SPC_EMULATOR_UNKNOWN;
-      break;
-  }
-
-  fseek(fp, 0xB0, SEEK_SET);
-  fread(id->author, 1, 32, fp);
-  id->author[32] = '\0';
-
-  return id;
-}  
-
-int SPC_write_id666 (SPC_ID666 *id, const char *filename)
-{
-  FILE *fp;
-  int spc_size;
-  unsigned char *spc_buf;
-
-  if (id == NULL)
-    return FALSE;
-
-  fp = fopen (filename, "rb");
-  if (fp == NULL)
-    return FALSE;
-
-  fseek(fp, 0, SEEK_END);
-  spc_size = ftell(fp);
-
-  spc_buf = (unsigned char *)malloc(spc_size);
-  if (spc_buf == NULL) {
-      fclose (fp);
-      return FALSE;
-  }
-
-  fread(spc_buf, 1, spc_size, fp);
-  fclose(fp);
-
-  if (*(spc_buf + 0x23) == 27)
-    {
-      free(spc_buf);
-      return FALSE;
+    fseek(fp, 0x23, SEEK_SET);
+    if (fgetc(fp) == 27) {
+        free(id);
+        return NULL;
     }
-  
-  memset(spc_buf + 0x2E, 0, 119);
-  memset(spc_buf + 0xA9, 0, 38);
-  memset(spc_buf + 0x2E, 0, 36);
-  
-  memcpy(spc_buf + 0x2E, id->songname, 32);
-  memcpy(spc_buf + 0x4E, id->gametitle, 32);
-  memcpy(spc_buf + 0x6E, id->dumper, 16);
-  memcpy(spc_buf + 0x7E, id->comments, 32);
-  memcpy(spc_buf + 0xB0, id->author, 32);
 
-  spc_buf[0xD0] = 0;
-  
-  switch (id->emulator) {
-  case SPC_EMULATOR_UNKNOWN:
-      *(spc_buf + 0xD1) = 0;
-      break;
-  case SPC_EMULATOR_ZSNES:
-      *(spc_buf + 0xD1) = 1;
-      break;
-  case SPC_EMULATOR_SNES9X:
-      *(spc_buf + 0xD1) = 2;
-      break;
-  }
-  
-  fp = fopen(filename, "wb");
-  if (fp == NULL) {
-      free(spc_buf);
-      return FALSE;
-  }
+    fseek(fp, 0x2E, SEEK_SET);
+    fread(id->songname, 1, 32, fp);
+    id->songname[32] = '\0';
 
-  fwrite(spc_buf, 1, spc_size, fp);
-  fclose(fp);
+    fread(id->gametitle, 1, 32, fp);
+    id->gametitle[32] = '\0';
 
-  return TRUE;
+    fread(id->dumper, 1, 16, fp);
+    id->dumper[16] = '\0';
+
+    fread(id->comments, 1, 32, fp);
+    id->comments[32] = '\0';
+
+    fseek(fp, 0xA9, SEEK_SET);
+    fread(playtime_str, 1, 3, fp);
+    id->playtime = atoi((char*)playtime_str);
+
+    fseek(fp, 0xD1, SEEK_SET);
+    switch (fgetc(fp)) {
+        case 1:
+            id->emulator = SPC_EMULATOR_ZSNES;
+            break;
+        case 2:
+            id->emulator = SPC_EMULATOR_SNES9X;
+            break;
+        case 0:
+        default:
+            id->emulator = SPC_EMULATOR_UNKNOWN;
+            break;
+    }
+
+    fseek(fp, 0xB0, SEEK_SET);
+    fread(id->author, 1, 32, fp);
+    id->author[32] = '\0';
+    return id;
 }
 
-END_EXTERN_C
+int SPC_write_id666(SPC_ID666 *id, const char *filename)
+{
+    if (id == NULL)
+        return FALSE;
+
+    FILE *fp = fopen(filename, "rb");
+    if (fp == NULL)
+        return FALSE;
+
+    fseek(fp, 0, SEEK_END);
+    int spc_size = ftell(fp);
+    rewind(fp);
+
+    unsigned char *spc_buf = (unsigned char *)malloc(spc_size);
+    if (spc_buf == NULL) {
+        fclose(fp);
+        return FALSE;
+    }
+
+    fread(spc_buf, 1, spc_size, fp);
+    fclose(fp);
+
+    if (*(spc_buf + 0x23) == 27) {
+        free(spc_buf);
+        return FALSE;
+    }
+
+    memset(spc_buf + 0x2E, 0, 119);
+    memset(spc_buf + 0xA9, 0, 38);
+    memset(spc_buf + 0x2E, 0, 36);
+
+    memcpy(spc_buf + 0x2E, id->songname, 32);
+    memcpy(spc_buf + 0x4E, id->gametitle, 32);
+    memcpy(spc_buf + 0x6E, id->dumper, 16);
+    memcpy(spc_buf + 0x7E, id->comments, 32);
+    memcpy(spc_buf + 0xB0, id->author, 32);
+
+    spc_buf[0xD0] = 0;
+    switch (id->emulator) {
+        case SPC_EMULATOR_ZSNES:
+            *(spc_buf + 0xD1) = 1;
+            break;
+        case SPC_EMULATOR_SNES9X:
+            *(spc_buf + 0xD1) = 2;
+            break;
+        case SPC_EMULATOR_UNKNOWN:
+        default:
+            *(spc_buf + 0xD1) = 0;
+            break;
+    }
+
+    fp = fopen(filename, "wb");
+    if (fp == NULL) {
+        free(spc_buf);
+        return FALSE;
+    }
+
+    fwrite(spc_buf, 1, spc_size, fp);
+    fclose(fp);
+    free(spc_buf);
+    return TRUE;
+}
+
+} // extern "C"

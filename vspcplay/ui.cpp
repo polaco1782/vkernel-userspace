@@ -1,7 +1,5 @@
 #include "frontend.h"
-
-#include "apu.h"
-#include "soundux.h"
+#include "spc_backend.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -122,6 +120,10 @@ void draw_browser(AppState* app)
 
 void draw_main_ui(AppState* app)
 {
+    static int songx_pos = 0;
+    static int songx_dir = 1;
+    static int songx_tick = 0;
+
     const vk_u32 white = pack_pixel(255, 255, 255, app->framebuffer.format);
     const vk_u32 black = pack_pixel(0, 0, 0, app->framebuffer.format);
     const vk_u32 yellow = pack_pixel(255, 255, 0, app->framebuffer.format);
@@ -131,6 +133,21 @@ void draw_main_ui(AppState* app)
     const vk_u32 gray = pack_pixel(127, 127, 127, app->framebuffer.format);
 
     fade_memory_surface();
+
+    if (++songx_tick >= 4) {
+        songx_tick = 0;
+        songx_pos += songx_dir;
+        if (songx_pos >= 768) {
+            songx_pos = 768;
+            songx_dir = -1;
+        } else if (songx_pos <= 0) {
+            songx_pos = 0;
+            songx_dir = 1;
+        }
+    }
+
+    draw_text(app, kMemoryViewX + songx_pos, kMemoryViewY - 20, "SONG:", white, 1);
+    draw_text_clipped(app, kMemoryViewX + songx_pos + 8 * 5, kMemoryViewY - 20, app->current_filename.c_str(), yellow, 1, 28);
 
     fill_rect(app, kMemoryViewX - 1, kMemoryViewY - 1, 514, 514, white);
     fill_rect(app, kMemoryViewX, kMemoryViewY, 512, 512, black);
@@ -165,7 +182,8 @@ void draw_main_ui(AppState* app)
     fill_rect(app, kMemoryViewX + 520, 96, 240, 8 * 8, black);
     for (int voice = 0; voice < 8; ++voice) {
         const unsigned short pitch = static_cast<unsigned short>(
-            APU.DSP[2 + (voice * 0x10)] | (APU.DSP[3 + (voice * 0x10)] << 8));
+            vspcplay_read_dsp_reg(static_cast<unsigned char>(2 + (voice * 0x10)))
+          | (vspcplay_read_dsp_reg(static_cast<unsigned char>(3 + (voice * 0x10))) << 8));
         snprintf(buffer, sizeof(buffer), "%d", voice);
         draw_text(app, kMemoryViewX + 520, 96 + voice * 8, buffer, white, 1);
         const int dot_x = kMemoryViewX + 540 + static_cast<int>((pitch * 200u) / 0x4000u);
@@ -180,14 +198,14 @@ void draw_main_ui(AppState* app)
     graph_y += 10;
     fill_rect(app, kMemoryViewX + 520, graph_y, 240, 82, black);
     for (int voice = 0; voice < 8; ++voice) {
-        const unsigned char left = APU.DSP[0 + (voice * 0x10)];
-        const unsigned char right = APU.DSP[1 + (voice * 0x10)];
-        const unsigned char gain = APU.DSP[7 + (voice * 0x10)];
+        const unsigned char left = vspcplay_read_dsp_reg(static_cast<unsigned char>(0 + (voice * 0x10)));
+        const unsigned char right = vspcplay_read_dsp_reg(static_cast<unsigned char>(1 + (voice * 0x10)));
+        const unsigned char gain = static_cast<unsigned char>(vspcplay_read_envx(voice));
         const int row_y = graph_y + voice * 10;
 
         snprintf(buffer, sizeof(buffer), "%d", voice);
         draw_text(app, kMemoryViewX + 520, row_y, buffer, white, 1);
-        if (SoundData.forceMute[voice])
+        if (vspcplay_is_voice_muted(voice))
             draw_text(app, kMemoryViewX + 720, row_y, "MUTED", gray, 1);
 
         fill_rect(app, kMemoryViewX + 538, row_y, (left * 200) / 255, 2, yellow);
@@ -207,7 +225,7 @@ void draw_main_ui(AppState* app)
         int x = kMemoryViewX + 520 + 6 * 8;
         for (int column = 0; column < 8; ++column) {
             const int address = (base_address + column) & 0xffff;
-            snprintf(buffer, sizeof(buffer), "%02X", IAPU.RAM[address]);
+            snprintf(buffer, sizeof(buffer), "%02X", vspcplay_read_apu_byte(static_cast<uint16_t>(address)));
             draw_text(app, x, dump_y, buffer, hexdump_color(app, address), 1);
             x += 20;
         }
@@ -220,18 +238,18 @@ void draw_main_ui(AppState* app)
     snprintf(buffer,
              sizeof(buffer),
              " +%02X- +%02X- +%02X- +%02X-",
-             IAPU.RAM[0xf4],
-             IAPU.RAM[0xf5],
-             IAPU.RAM[0xf6],
-             IAPU.RAM[0xf7]);
+             vspcplay_read_input_port(0),
+             vspcplay_read_input_port(1),
+             vspcplay_read_input_port(2),
+             vspcplay_read_input_port(3));
     draw_text(app, kPortToolX + 40, kPortToolY + 8, buffer, white, 1);
     snprintf(buffer,
              sizeof(buffer),
              "  %02X   %02X   %02X   %02X",
-             APU.OutPorts[0],
-             APU.OutPorts[1],
-             APU.OutPorts[2],
-             APU.OutPorts[3]);
+             vspcplay_read_output_port(0),
+             vspcplay_read_output_port(1),
+             vspcplay_read_output_port(2),
+             vspcplay_read_output_port(3));
     draw_text(app, kPortToolX + 40, kPortToolY + 16, buffer, white, 1);
 
     draw_text(app, kInfoX, kInfoY, "INFO", white, 1);

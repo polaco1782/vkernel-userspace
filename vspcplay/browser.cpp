@@ -15,6 +15,14 @@ auto browser_is_supported_file(const char* name, vk_u64 size_bytes) -> bool
     return ends_with_casefolded(name, ".spc");
 }
 
+auto browser_should_include_entry(const BrowserEntry& entry) -> bool
+{
+    if (entry.is_directory)
+        return true;
+
+    return browser_is_supported_file(entry.name.c_str(), entry.size_bytes);
+}
+
 auto parse_entry_record(const char* record, BrowserEntry* entry) -> bool
 {
     if (record == nullptr || entry == nullptr)
@@ -132,14 +140,14 @@ auto browser_refresh_listing(AppState* app) -> bool
         BrowserEntry entry;
         if (!parse_entry_record(browser->raw_items[static_cast<size_t>(index)].data(), &entry))
             continue;
-        if (!entry.is_directory && !browser_is_supported_file(entry.name.c_str(), entry.size_bytes))
+        if (!browser_should_include_entry(entry))
             continue;
         browser->entries[browser->entry_count++] = entry;
     }
 
     sort_entries(browser);
     if (browser->entry_count == 0) {
-        browser->status = "NO SPC FILES IN THIS DIRECTORY";
+        browser->status = "NO SPC FILES OR DIRECTORIES";
     } else {
         char buffer[kStatusMax] = {};
         snprintf(buffer,

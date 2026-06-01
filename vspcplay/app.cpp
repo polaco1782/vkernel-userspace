@@ -1,7 +1,5 @@
 #include "frontend.h"
-
-#include "apu.h"
-#include "soundux.h"
+#include "spc_backend.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,15 +112,24 @@ void queue_samples(AppState* app, const int16_t* samples, vk_u32 sample_count)
     const vk_u32 capacity = static_cast<vk_u32>(app->audio.queue.size());
     sample_count &= ~1u;
     for (vk_u32 index = 0; index < sample_count; ++index) {
-        if (app->audio.queue_count >= capacity) {
-            app->audio.queue_read = (app->audio.queue_read + 2u) % capacity;
-            app->audio.queue_count -= 2u;
-        }
+        if (app->audio.queue_count >= capacity)
+            return;
 
         app->audio.queue[app->audio.queue_write] = samples[index];
         app->audio.queue_write = (app->audio.queue_write + 1u) % capacity;
         ++app->audio.queue_count;
     }
+}
+
+auto queued_frames(const AppState* app) -> vk_u32
+{
+    if (app == nullptr)
+        return 0;
+
+    vk_u32 frames = app->audio.queue_count / 2u;
+    if (app->audio.play_block_pending)
+        frames += app->audio.play_block_samples / 2u;
+    return frames;
 }
 
 auto pop_samples(AppState* app, int16_t* output, vk_u32 requested_samples) -> vk_u32
@@ -361,14 +368,14 @@ void handle_mouse_click(AppState* app, vk_u32 previous_buttons, vk_u32 current_b
         const int y = (app->ui.mouse_y - kPortToolY) / 8;
         if (y == 1) {
             switch (x) {
-                case 1: ++IAPU.RAM[0xf4]; break;
-                case 4: --IAPU.RAM[0xf4]; break;
-                case 6: ++IAPU.RAM[0xf5]; break;
-                case 9: --IAPU.RAM[0xf5]; break;
-                case 11: ++IAPU.RAM[0xf6]; break;
-                case 14: --IAPU.RAM[0xf6]; break;
-                case 16: ++IAPU.RAM[0xf7]; break;
-                case 19: --IAPU.RAM[0xf7]; break;
+                case 1: vspcplay_write_input_port(0, static_cast<unsigned char>(vspcplay_read_input_port(0) + 1u)); break;
+                case 4: vspcplay_write_input_port(0, static_cast<unsigned char>(vspcplay_read_input_port(0) - 1u)); break;
+                case 6: vspcplay_write_input_port(1, static_cast<unsigned char>(vspcplay_read_input_port(1) + 1u)); break;
+                case 9: vspcplay_write_input_port(1, static_cast<unsigned char>(vspcplay_read_input_port(1) - 1u)); break;
+                case 11: vspcplay_write_input_port(2, static_cast<unsigned char>(vspcplay_read_input_port(2) + 1u)); break;
+                case 14: vspcplay_write_input_port(2, static_cast<unsigned char>(vspcplay_read_input_port(2) - 1u)); break;
+                case 16: vspcplay_write_input_port(3, static_cast<unsigned char>(vspcplay_read_input_port(3) + 1u)); break;
+                case 19: vspcplay_write_input_port(3, static_cast<unsigned char>(vspcplay_read_input_port(3) - 1u)); break;
                 default: break;
             }
         }
@@ -416,7 +423,7 @@ auto init_app(AppState* app) -> bool
     memsurface_data = app->memory_surface.data();
 
     for (size_t index = 0; index < app->config.muted_at_startup.size(); ++index)
-        SoundData.forceMute[index] = app->config.muted_at_startup[index] ? 1 : 0;
+        vspcplay_set_voice_muted(static_cast<int>(index), app->config.muted_at_startup[index] != 0);
 
     if (!app->config.wave_output_path.empty()) {
         app->wave_writer = waveWriter_create(app->config.wave_output_path.c_str());
@@ -548,11 +555,9 @@ void pump_input(AppState* app)
             default:
                 if (key_event.ascii >= '1' && key_event.ascii <= '8') {
                     const int channel = key_event.ascii - '1';
-                    SoundData.forceMute[channel] = SoundData.forceMute[channel] ? 0 : 1;
+                    vspcplay_set_voice_muted(channel, !vspcplay_is_voice_muted(channel));
                 } else if (key_event.ascii == '0') {
-                    const bool muted = SoundData.forceMute[0] == 0;
-                    for (int index = 0; index < 8; ++index)
-                        SoundData.forceMute[index] = muted ? 1 : 0;
+                    vspcplay_set_all_voices_muted(!vspcplay_is_voice_muted(0));
                 } else if (key_event.ascii == 'e' || key_event.ascii == 'E') {
                     app->ui.endless = !app->ui.endless;
                 } else if (key_event.ascii == 'm' || key_event.ascii == 'M') {
@@ -599,16 +604,8 @@ void update_playback(AppState* app)
                 break;
         }
     } else {
-        const vk_u64 ticks_per_second = static_cast<vk_u64>(VK_CALL(ticks_per_sec));
-        const vk_u64 now = VK_CALL(tick_count);
-        const vk_u64 elapsed_ticks = now > app->ui.track_start_tick ? now - app->ui.track_start_tick : 0;
-        const vk_u64 active_ticks = elapsed_ticks > app->ui.paused_ticks ? elapsed_ticks - app->ui.paused_ticks : 0;
-        const vk_u64 target_frames = ticks_per_second == 0
-                                   ? app->audio.generated_frames
-                                   : ((active_ticks * kOutputSampleRate) / ticks_per_second) + kQueueLeadFrames;
-
         int guard = 0;
-        while (app->audio.generated_frames < target_frames && guard < 64) {
+        while (queued_frames(app) < kQueueLeadFrames && guard < 64) {
             if (!generate_audio_batch(app))
                 break;
             ++guard;

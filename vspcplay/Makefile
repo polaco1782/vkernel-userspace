@@ -10,6 +10,7 @@ LIBC_DIR        := ../libc
 CPP_DIR         := ../cpp
 CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
+SNES9X_SRC      := ../snes9x-src
 BUILD_DIR       := build
 
 DEPFLAGS := -MMD -MP
@@ -41,6 +42,8 @@ CXXFLAGS  += -isystem $(SYSROOT)/include
 CXXFLAGS  += -I$(USER_INCLUDE)
 CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
+CXXFLAGS  += -I$(SNES9X_SRC)
+CXXFLAGS  += -DVSPCPLAY_TRACE_HOOKS
 
 CFLAGS := -std=c11
 CFLAGS += -ffreestanding
@@ -86,26 +89,31 @@ ifdef DEBUG
 LIBC_MAKE_ARGS += DEBUG=$(DEBUG)
 endif
 
-CPP_SRCS := \
-	apu.cpp \
+LOCAL_CPP_SRCS := \
 	app.cpp \
 	browser.cpp \
 	common.cpp \
-	globals.cpp \
 	libspc.cpp \
 	main.cpp \
-	soundux.cpp \
-	spc700.cpp \
+	s9x_env.cpp \
+	spc_backend.cpp \
 	ui.cpp
+
+EXTERNAL_CPP_SRCS := \
+	../snes9x-src/apu/apu.cpp \
+	../snes9x-src/apu/bapu/dsp/sdsp.cpp \
+	../snes9x-src/apu/bapu/smp/smp.cpp \
+	../snes9x-src/apu/bapu/smp/smp_state.cpp
 
 C_SRCS := \
 	font.c \
 	id666.c \
 	wavewriter.c
 
-CPP_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SRCS))
+LOCAL_CPP_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(LOCAL_CPP_SRCS))
+EXTERNAL_CPP_OBJS := $(patsubst ../%.cpp,$(BUILD_DIR)/%.o,$(EXTERNAL_CPP_SRCS))
 C_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SRCS))
-ALL_OBJS := $(CPP_OBJS) $(C_OBJS)
+ALL_OBJS := $(LOCAL_CPP_OBJS) $(EXTERNAL_CPP_OBJS) $(C_OBJS)
 ALL_DEPS := $(ALL_OBJS:.o=.d)
 
 TARGET := vspcplay.vbin
@@ -115,6 +123,11 @@ TARGET := vspcplay.vbin
 all: $(TARGET)
 
 $(BUILD_DIR)/%.o: %.cpp
+	@echo "  CXX     $<"
+	@mkdir -p $(dir $@)
+	@$(CXX) $(CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
+
+$(BUILD_DIR)/%.o: ../%.cpp
 	@echo "  CXX     $<"
 	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
