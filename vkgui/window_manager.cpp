@@ -243,8 +243,10 @@ auto WindowManager::resize_app_framebuffer(AppWindow& app, vk_u32 width, vk_u32 
         return false;
     }
 
-    /* Retry once the app yields so we do not swap its shared mapping mid-blit. */
-    if (task.state == 1u) {
+    /* Only swap the shared framebuffer while the app is in a blocked wait path.
+     * "Not running" is too weak here because the scheduler can report blocked
+     * before the task is fully off-CPU. */
+    if (task.state != 2u) {
         return false;
     }
 

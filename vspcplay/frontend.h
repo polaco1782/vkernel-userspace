@@ -35,7 +35,7 @@ struct Config {
     bool nosound = false;
     bool novideo = false;
     bool show_status_line = false;
-    bool interpolation = false;
+    bool interpolation = true;
     bool echo = true;
     bool ignore_tag_time = false;
     bool auto_write_mask = false;
