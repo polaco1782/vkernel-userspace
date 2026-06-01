@@ -586,6 +586,7 @@ auto builtin_theme_catalog() -> ThemeCatalog
 
     ThemeScheme* win9x = catalog.add_scheme("Win9x", ThemeBaseStyle::classic, 0x38, 0x6e, 0xa5);
     if (win9x != nullptr) {
+        win9x->use_win9x_chrome = true;
         add_hex_color_override(win9x, classic_base, ImGuiCol_Text, "#000000");
         add_hex_color_override(win9x, classic_base, ImGuiCol_TextDisabled, "#7F7F7F");
         add_hex_color_override(win9x, classic_base, ImGuiCol_WindowBg, "#d4d0c8");
@@ -632,6 +633,8 @@ auto builtin_theme_catalog() -> ThemeCatalog
         (void)win9x->add_style_float_override(ThemeStyleOverrideKey::frame_border_size, 1.0f);
         (void)win9x->add_style_float_override(ThemeStyleOverrideKey::popup_border_size, 1.0f);
         (void)win9x->add_style_float_override(ThemeStyleOverrideKey::tab_border_size, 1.0f);
+        (void)win9x->add_style_int_override(ThemeStyleOverrideKey::window_menu_button_position,
+                           static_cast<int>(ImGuiDir_Right));
         (void)win9x->add_style_vec2_override(ThemeStyleOverrideKey::frame_padding, 5.0f, 3.0f);
         (void)win9x->add_style_float_override(ThemeStyleOverrideKey::scrollbar_size, 20.0f);
         (void)win9x->add_style_float_override(ThemeStyleOverrideKey::grab_min_size, 15.0f);
@@ -716,6 +719,7 @@ auto parse_theme_style_key(vk::string_view text, ThemeStyleOverrideKey& key) -> 
 
 auto theme_scheme_from_style(vk::string_view name,
                              ThemeBaseStyle base_style,
+                             bool use_win9x_chrome,
                              int clear_r,
                              int clear_g,
                              int clear_b,
@@ -724,6 +728,7 @@ auto theme_scheme_from_style(vk::string_view name,
     ThemeScheme scheme;
     scheme.name = string_from_view(name);
     scheme.base_style = base_style;
+    scheme.use_win9x_chrome = use_win9x_chrome;
     scheme.clear_r = clear_r;
     scheme.clear_g = clear_g;
     scheme.clear_b = clear_b;
@@ -809,6 +814,7 @@ auto theme_scheme_from_style(vk::string_view name,
 void apply_theme_scheme(const ThemeScheme& scheme)
 {
     apply_base_style(scheme.base_style, nullptr);
+    ImGui::SetWin98ThemeEnabled(scheme.use_win9x_chrome);
 
     ::ImGui_ImplVK_SetClearColor(static_cast<unsigned int>(scheme.clear_r),
                                  static_cast<unsigned int>(scheme.clear_g),
@@ -825,6 +831,10 @@ void apply_theme_scheme(const ThemeScheme& scheme)
 
     for (int index = 0; index < scheme.style_override_count; ++index) {
         apply_style_override(style, scheme.style_overrides[index]);
+    }
+
+    if (scheme.use_win9x_chrome) {
+        style.WindowMenuButtonPosition = ImGuiDir_Right;
     }
 }
 

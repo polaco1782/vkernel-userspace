@@ -2772,6 +2772,85 @@ bool ImFontAtlas::GetMouseCursorTexData(ImGuiMouseCursor cursor_type, ImVec2* ou
     return true;
 }
 
+namespace {
+
+constexpr unsigned char k_win98_minimize_glyph_runs[] = {86, 6, 6, 6, 0};
+constexpr unsigned char k_win98_close_glyph_runs[] = {14, 2, 4, 2, 5, 2, 2, 2, 7, 4, 9, 2, 9, 4, 7, 2, 2, 2, 5, 2, 4, 2, 0};
+
+struct Win98TitleGlyphSpec {
+    ImWchar codepoint;
+    const unsigned char* run_lengths;
+};
+
+constexpr Win98TitleGlyphSpec k_win98_title_glyphs[] = {
+    { 215, k_win98_close_glyph_runs },
+    { 216, k_win98_minimize_glyph_runs },
+};
+
+auto find_win98_title_glyph_rect(ImFontAtlas* atlas, ImFont* font, ImWchar codepoint) -> ImFontAtlasCustomRect*
+{
+    for (int index = 0; index < atlas->CustomRects.Size; ++index)
+    {
+        ImFontAtlasCustomRect& rect = atlas->CustomRects[index];
+        if (rect.Font == font && rect.GlyphID == codepoint && rect.Width == 12 && rect.Height == 9)
+            return &rect;
+    }
+    return NULL;
+}
+
+void add_win98_title_button_glyphs(ImFontAtlas* atlas)
+{
+    if (atlas == NULL || atlas->Fonts.Size <= 0)
+        return;
+
+    ImFont* font = atlas->Fonts[0];
+    for (const Win98TitleGlyphSpec& glyph : k_win98_title_glyphs)
+        if (find_win98_title_glyph_rect(atlas, font, glyph.codepoint) == NULL)
+            atlas->AddCustomRectFontGlyph(font, glyph.codepoint, 12, 9, 14.0f);
+}
+
+void bake_win98_title_button_glyphs(ImFontAtlas* atlas)
+{
+    if (atlas == NULL || atlas->TexPixelsAlpha8 == NULL || atlas->Fonts.Size <= 0)
+        return;
+
+    ImFont* font = atlas->Fonts[0];
+    for (const Win98TitleGlyphSpec& glyph : k_win98_title_glyphs)
+    {
+        ImFontAtlasCustomRect* rect = find_win98_title_glyph_rect(atlas, font, glyph.codepoint);
+        if (rect == NULL || !rect->IsPacked())
+            continue;
+
+        bool black = false;
+        const unsigned char* run = glyph.run_lengths;
+        int run_size = 0;
+        for (int y = 0; y < rect->Height; ++y)
+        {
+            unsigned char* pixel = atlas->TexPixelsAlpha8 + (rect->Y + y) * atlas->TexWidth + rect->X;
+            for (int x = rect->Width; x > 0; --x)
+            {
+                if (black)
+                    *pixel = 255;
+                ++pixel;
+                ++run_size;
+                if (run_size == *run)
+                {
+                    run_size = 0;
+                    ++run;
+                    black = !black;
+                    if (*run == 0)
+                        goto glyph_done;
+                }
+            }
+        }
+
+glyph_done:
+        continue;
+    }
+}
+
+} // namespace
+
 bool    ImFontAtlas::Build()
 {
     IM_ASSERT(!Locked && "Cannot modify a locked ImFontAtlas between NewFrame() and EndFrame/Render()!");
@@ -2779,6 +2858,8 @@ bool    ImFontAtlas::Build()
     // Default font is none are specified
     if (ConfigData.Size == 0)
         AddFontDefault();
+
+    add_win98_title_button_glyphs(this);
 
     // Select builder
     // - Note that we do not reassign to atlas->FontBuilderIO, since it is likely to point to static data which
@@ -2798,7 +2879,10 @@ bool    ImFontAtlas::Build()
     }
 
     // Build
-    return builder_io->FontBuilder_Build(this);
+    const bool built = builder_io->FontBuilder_Build(this);
+    if (built)
+        bake_win98_title_button_glyphs(this);
+    return built;
 }
 
 void    ImFontAtlasBuildMultiplyCalcLookupTable(unsigned char out_table[256], float in_brighten_factor)

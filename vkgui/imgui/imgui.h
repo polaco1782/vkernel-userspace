@@ -1058,6 +1058,9 @@ namespace ImGui
     IMGUI_API void          GetAllocatorFunctions(ImGuiMemAllocFunc* p_alloc_func, ImGuiMemFreeFunc* p_free_func, void** p_user_data);
     IMGUI_API void*         MemAlloc(size_t size);
     IMGUI_API void          MemFree(void* ptr);
+    IMGUI_API void          SetWin98ThemeEnabled(bool enabled);
+    IMGUI_API bool          IsWin98ThemeEnabled();
+    IMGUI_API void          WinAddRect(const ImVec2& min, const ImVec2& max, bool inset);
 
 } // namespace ImGui
 

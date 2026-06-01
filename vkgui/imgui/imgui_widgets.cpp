@@ -746,7 +746,7 @@ bool ImGui::ButtonEx(const char* label, const ImVec2& size_arg, ImGuiButtonFlags
     // Render
     const ImU32 col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
     RenderNavCursor(bb, id);
-    RenderFrame(bb.Min, bb.Max, col, true, style.FrameRounding);
+    RenderFrame(bb.Min, bb.Max, col, true, style.FrameRounding, true);
 
     if (g.LogEnabled)
         LogSetNextTextDecoration("[", "]");
@@ -824,7 +824,7 @@ bool ImGui::ArrowButtonEx(const char* str_id, ImGuiDir dir, ImVec2 size, ImGuiBu
     const ImU32 bg_col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
     const ImU32 text_col = GetColorU32(ImGuiCol_Text);
     RenderNavCursor(bb, id);
-    RenderFrame(bb.Min, bb.Max, bg_col, true, g.Style.FrameRounding);
+    RenderFrame(bb.Min, bb.Max, bg_col, true, g.Style.FrameRounding, true);
     RenderArrow(window->DrawList, bb.Min + ImVec2(ImMax(0.0f, (size.x - g.FontSize) * 0.5f), ImMax(0.0f, (size.y - g.FontSize) * 0.5f)), text_col, dir);
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, str_id, g.LastItemData.StatusFlags);
@@ -842,10 +842,13 @@ bool ImGui::CloseButton(ImGuiID id, const ImVec2& pos)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
+    const bool win98_theme_enabled = IsWin98ThemeEnabled();
+    const ImVec2 win98_button_size(14.0f, 12.0f);
+    const ImVec2 win98_glyph_size(12.0f, 9.0f);
 
     // Tweak 1: Shrink hit-testing area if button covers an abnormally large proportion of the visible region. That's in order to facilitate moving the window away. (#3825)
     // This may better be applied as a general hit-rect reduction mechanism for all widgets to ensure the area to move window is always accessible?
-    const ImRect bb(pos, pos + ImVec2(g.FontSize, g.FontSize));
+    const ImRect bb(pos, pos + (win98_theme_enabled ? win98_button_size : ImVec2(g.FontSize, g.FontSize)));
     ImRect bb_interact = bb;
     const float area_to_visible_ratio = window->OuterRectClipped.GetArea() / bb.GetArea();
     if (area_to_visible_ratio < 1.5f)
@@ -862,14 +865,28 @@ bool ImGui::CloseButton(ImGuiID id, const ImVec2& pos)
 
     // Render
     ImU32 bg_col = GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered);
-    if (hovered)
-        window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_col);
     RenderNavCursor(bb, id, ImGuiNavRenderCursorFlags_Compact);
-    ImU32 cross_col = GetColorU32(ImGuiCol_Text);
-    ImVec2 cross_center = bb.GetCenter() - ImVec2(0.5f, 0.5f);
-    float cross_extent = g.FontSize * 0.5f * 0.7071f - 1.0f;
-    window->DrawList->AddLine(cross_center + ImVec2(+cross_extent, +cross_extent), cross_center + ImVec2(-cross_extent, -cross_extent), cross_col, 1.0f);
-    window->DrawList->AddLine(cross_center + ImVec2(+cross_extent, -cross_extent), cross_center + ImVec2(-cross_extent, +cross_extent), cross_col, 1.0f);
+    if (win98_theme_enabled)
+    {
+        const ImU32 fill_col = GetColorU32(ImGuiCol_WindowBg);
+        window->DrawList->AddRectFilled(bb.Min, bb.Max, fill_col);
+        WinAddRect(bb.Min, bb.Max, hovered && held);
+        const ImVec2 glyph_pos(bb.Min.x + IM_TRUNC((bb.GetWidth() - win98_glyph_size.x) * 0.5f),
+                               bb.Min.y + IM_TRUNC((bb.GetHeight() - win98_glyph_size.y) * 0.5f));
+        PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 255));
+        RenderText(glyph_pos, "\xC3\x97");
+        PopStyleColor();
+    }
+    else
+    {
+        if (hovered)
+            window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_col);
+        ImU32 cross_col = GetColorU32(ImGuiCol_Text);
+        ImVec2 cross_center = bb.GetCenter() - ImVec2(0.5f, 0.5f);
+        float cross_extent = g.FontSize * 0.5f * 0.7071f - 1.0f;
+        window->DrawList->AddLine(cross_center + ImVec2(+cross_extent, +cross_extent), cross_center + ImVec2(-cross_extent, -cross_extent), cross_col, 1.0f);
+        window->DrawList->AddLine(cross_center + ImVec2(+cross_extent, -cross_extent), cross_center + ImVec2(-cross_extent, +cross_extent), cross_col, 1.0f);
+    }
 
     return pressed;
 }
@@ -878,8 +895,11 @@ bool ImGui::CollapseButton(ImGuiID id, const ImVec2& pos)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
+    const bool win98_theme_enabled = IsWin98ThemeEnabled();
+    const ImVec2 win98_button_size(14.0f, 12.0f);
+    const ImVec2 win98_glyph_size(12.0f, 9.0f);
 
-    ImRect bb(pos, pos + ImVec2(g.FontSize, g.FontSize));
+    ImRect bb(pos, pos + (win98_theme_enabled ? win98_button_size : ImVec2(g.FontSize, g.FontSize)));
     bool is_clipped = !ItemAdd(bb, id);
     bool hovered, held;
     bool pressed = ButtonBehavior(bb, id, &hovered, &held, ImGuiButtonFlags_None);
@@ -889,10 +909,24 @@ bool ImGui::CollapseButton(ImGuiID id, const ImVec2& pos)
     // Render
     ImU32 bg_col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
     ImU32 text_col = GetColorU32(ImGuiCol_Text);
-    if (hovered || held)
-        window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_col);
     RenderNavCursor(bb, id, ImGuiNavRenderCursorFlags_Compact);
-    RenderArrow(window->DrawList, bb.Min, text_col, window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down, 1.0f);
+    if (win98_theme_enabled)
+    {
+        const ImU32 fill_col = GetColorU32(ImGuiCol_WindowBg);
+        window->DrawList->AddRectFilled(bb.Min, bb.Max, fill_col);
+        WinAddRect(bb.Min, bb.Max, hovered && held);
+        const ImVec2 glyph_pos(bb.Min.x + IM_TRUNC((bb.GetWidth() - win98_glyph_size.x) * 0.5f),
+                               bb.Min.y + IM_TRUNC((bb.GetHeight() - win98_glyph_size.y) * 0.5f));
+        PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 255));
+        RenderText(glyph_pos, "\xC3\x98");
+        PopStyleColor();
+    }
+    else
+    {
+        if (hovered || held)
+            window->DrawList->AddRectFilled(bb.Min, bb.Max, bg_col);
+        RenderArrow(window->DrawList, bb.Min, text_col, window->Collapsed ? ImGuiDir_Right : ImGuiDir_Down, 1.0f);
+    }
 
     // Switch to moving the window after mouse is moved beyond the initial drag threshold
     if (IsItemActive() && IsMouseDragging(0))
@@ -1099,7 +1133,7 @@ bool ImGui::ImageButtonEx(ImGuiID id, ImTextureID user_texture_id, const ImVec2&
     // Render
     const ImU32 col = GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
     RenderNavCursor(bb, id);
-    RenderFrame(bb.Min, bb.Max, col, true, ImClamp((float)ImMin(padding.x, padding.y), 0.0f, g.Style.FrameRounding));
+    RenderFrame(bb.Min, bb.Max, col, true, ImClamp((float)ImMin(padding.x, padding.y), 0.0f, g.Style.FrameRounding), true);
     if (bg_col.w > 0.0f)
         window->DrawList->AddRectFilled(bb.Min + padding, bb.Max - padding, GetColorU32(bg_col));
     window->DrawList->AddImage(user_texture_id, bb.Min + padding, bb.Max - padding, uv0, uv1, GetColorU32(tint_col));

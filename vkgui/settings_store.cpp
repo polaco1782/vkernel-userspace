@@ -17,6 +17,7 @@ constexpr auto k_theme_schema =
     " sort_index INTEGER NOT NULL UNIQUE,"
     " name TEXT NOT NULL,"
     " base_style TEXT NOT NULL,"
+    " use_win9x_chrome INTEGER NOT NULL DEFAULT 0,"
     " clear_r INTEGER NOT NULL,"
     " clear_g INTEGER NOT NULL,"
     " clear_b INTEGER NOT NULL"
@@ -187,7 +188,7 @@ auto SettingsStore::load_theme_catalog(ThemeCatalog& catalog) -> bool
 
     SQLiteStatement scheme_statement;
     if (!database_.prepare(
-            "SELECT id, name, base_style, clear_r, clear_g, clear_b "
+            "SELECT id, name, base_style, use_win9x_chrome, clear_r, clear_g, clear_b "
             "FROM theme_schemes ORDER BY sort_index, id;",
             scheme_statement)) {
         set_error_from_db();
@@ -221,9 +222,10 @@ auto SettingsStore::load_theme_catalog(ThemeCatalog& catalog) -> bool
             scheme.base_style = base_style;
         }
 
-        scheme.clear_r = clamp_byte(scheme_statement.column_int(3));
-        scheme.clear_g = clamp_byte(scheme_statement.column_int(4));
-        scheme.clear_b = clamp_byte(scheme_statement.column_int(5));
+        scheme.use_win9x_chrome = scheme_statement.column_int(3) != 0;
+        scheme.clear_r = clamp_byte(scheme_statement.column_int(4));
+        scheme.clear_g = clamp_byte(scheme_statement.column_int(5));
+        scheme.clear_b = clamp_byte(scheme_statement.column_int(6));
 
         SQLiteStatement color_statement;
         if (!database_.prepare(
@@ -480,8 +482,8 @@ auto SettingsStore::insert_theme_scheme(int scheme_id, int sort_index, const The
     SQLiteStatement statement;
     if (!database_.prepare(
             "INSERT INTO theme_schemes "
-            "(id, sort_index, name, base_style, clear_r, clear_g, clear_b) "
-            "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);",
+            "(id, sort_index, name, base_style, use_win9x_chrome, clear_r, clear_g, clear_b) "
+            "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);",
             statement)) {
         set_error_from_db();
         return false;
@@ -491,9 +493,10 @@ auto SettingsStore::insert_theme_scheme(int scheme_id, int sort_index, const The
         || !statement.bind_int(2, sort_index)
         || !statement.bind_text(3, string_view_of(scheme.name))
         || !statement.bind_text(4, theme_base_style_name(scheme.base_style))
-        || !statement.bind_int(5, clamp_byte(scheme.clear_r))
-        || !statement.bind_int(6, clamp_byte(scheme.clear_g))
-        || !statement.bind_int(7, clamp_byte(scheme.clear_b))) {
+        || !statement.bind_int(5, scheme.use_win9x_chrome ? 1 : 0)
+        || !statement.bind_int(6, clamp_byte(scheme.clear_r))
+        || !statement.bind_int(7, clamp_byte(scheme.clear_g))
+        || !statement.bind_int(8, clamp_byte(scheme.clear_b))) {
         last_error_ = statement.last_error();
         return false;
     }

@@ -1305,6 +1305,7 @@ static void    FreeWrapper(void* ptr, void* user_data)        { IM_UNUSED(user_d
 static ImGuiMemAllocFunc    GImAllocatorAllocFunc = MallocWrapper;
 static ImGuiMemFreeFunc     GImAllocatorFreeFunc = FreeWrapper;
 static void*                GImAllocatorUserData = NULL;
+static bool                 GWin98ThemeEnabled = false;
 
 //-----------------------------------------------------------------------------
 // [SECTION] USER FACING STRUCTURES (ImGuiStyle, ImGuiIO, ImGuiPlatformIO)
@@ -3721,7 +3722,7 @@ void ImGui::RenderTextEllipsis(ImDrawList* draw_list, const ImVec2& pos_min, con
 }
 
 // Render a rectangle shaped with optional rounding and borders
-void ImGui::RenderFrame(ImVec2 p_min, ImVec2 p_max, ImU32 fill_col, bool borders, float rounding)
+void ImGui::RenderFrame(ImVec2 p_min, ImVec2 p_max, ImU32 fill_col, bool borders, float rounding, bool win98_raised)
 {
     ImGuiContext& g = *GImGui;
     ImGuiWindow* window = g.CurrentWindow;
@@ -3729,8 +3730,13 @@ void ImGui::RenderFrame(ImVec2 p_min, ImVec2 p_max, ImU32 fill_col, bool borders
     const float border_size = g.Style.FrameBorderSize;
     if (borders && border_size > 0.0f)
     {
-        window->DrawList->AddRect(p_min + ImVec2(1, 1), p_max + ImVec2(1, 1), GetColorU32(ImGuiCol_BorderShadow), rounding, 0, border_size);
-        window->DrawList->AddRect(p_min, p_max, GetColorU32(ImGuiCol_Border), rounding, 0, border_size);
+        if (IsWin98ThemeEnabled())
+            WinAddRect(p_min, p_max, !win98_raised);
+        else
+        {
+            window->DrawList->AddRect(p_min + ImVec2(1, 1), p_max + ImVec2(1, 1), GetColorU32(ImGuiCol_BorderShadow), rounding, 0, border_size);
+            window->DrawList->AddRect(p_min, p_max, GetColorU32(ImGuiCol_Border), rounding, 0, border_size);
+        }
     }
 }
 
@@ -3840,6 +3846,16 @@ void ImGui::GetAllocatorFunctions(ImGuiMemAllocFunc* p_alloc_func, ImGuiMemFreeF
     *p_alloc_func = GImAllocatorAllocFunc;
     *p_free_func = GImAllocatorFreeFunc;
     *p_user_data = GImAllocatorUserData;
+}
+
+void ImGui::SetWin98ThemeEnabled(bool enabled)
+{
+    GWin98ThemeEnabled = enabled;
+}
+
+bool ImGui::IsWin98ThemeEnabled()
+{
+    return GWin98ThemeEnabled;
 }
 
 ImGuiContext* ImGui::CreateContext(ImFontAtlas* shared_font_atlas)
@@ -6699,6 +6715,37 @@ static inline void ClampWindowPos(ImGuiWindow* window, const ImRect& visibility_
     window->Pos = ImClamp(window->Pos, visibility_rect.Min - size_for_clamping, visibility_rect.Max);
 }
 
+void ImGui::WinAddRect(const ImVec2& min, const ImVec2& max, bool inset)
+{
+    ImU32 bright_out = IM_COL32(255, 255, 255, 255);
+    ImU32 dark_out   = IM_COL32(0,   0,   0,   255);
+    ImU32 bright_in  = IM_COL32(223, 223, 223, 255);
+    ImU32 dark_in    = IM_COL32(128, 128, 128, 255);
+
+    if (inset)
+    {
+        ImU32 tmp = bright_out; bright_out = dark_out;  dark_out  = tmp;
+                   tmp = bright_in;  bright_in  = dark_in;   dark_in   = tmp;
+    }
+
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float x0 = min.x, y0 = min.y;
+    const float x1 = max.x, y1 = max.y;
+
+    // Outer bevel: top row and left column = bright; bottom row and right column = dark.
+    // Draw order ensures dark wins at top-right and bottom-left corners (Win9x convention).
+    dl->AddRectFilled(ImVec2(x0,     y0),     ImVec2(x1,     y0 + 1), bright_out); // top
+    dl->AddRectFilled(ImVec2(x0,     y0 + 1), ImVec2(x0 + 1, y1),     bright_out); // left
+    dl->AddRectFilled(ImVec2(x0,     y1 - 1), ImVec2(x1,     y1),     dark_out);   // bottom
+    dl->AddRectFilled(ImVec2(x1 - 1, y0),     ImVec2(x1,     y1 - 1), dark_out);   // right
+
+    // Inner bevel
+    dl->AddRectFilled(ImVec2(x0 + 1, y0 + 1), ImVec2(x1 - 1, y0 + 2), bright_in); // top
+    dl->AddRectFilled(ImVec2(x0 + 1, y0 + 2), ImVec2(x0 + 2, y1 - 1), bright_in); // left
+    dl->AddRectFilled(ImVec2(x0 + 1, y1 - 2), ImVec2(x1 - 1, y1 - 1), dark_in);   // bottom
+    dl->AddRectFilled(ImVec2(x1 - 2, y0 + 1), ImVec2(x1 - 1, y1 - 2), dark_in);   // right
+}
+
 static void RenderWindowOuterSingleBorder(ImGuiWindow* window, int border_n, ImU32 border_col, float border_size)
 {
     const ImGuiResizeBorderDef& def = resize_border_def[border_n];
@@ -6715,7 +6762,12 @@ static void ImGui::RenderWindowOuterBorders(ImGuiWindow* window)
     const float border_size = window->WindowBorderSize;
     const ImU32 border_col = GetColorU32(ImGuiCol_Border);
     if (border_size > 0.0f && (window->Flags & ImGuiWindowFlags_NoBackground) == 0)
-        window->DrawList->AddRect(window->Pos, window->Pos + window->Size, border_col, window->WindowRounding, 0, window->WindowBorderSize);
+    {
+        if (IsWin98ThemeEnabled())
+            WinAddRect(window->Pos, window->Pos + window->Size, false);
+        else
+            window->DrawList->AddRect(window->Pos, window->Pos + window->Size, border_col, window->WindowRounding, 0, window->WindowBorderSize);
+    }
     else if (border_size > 0.0f)
     {
         if (window->ChildFlags & ImGuiChildFlags_ResizeX) // Similar code as 'resize_border_mask' computation in UpdateWindowManualResize() but we specifically only always draw explicit child resize border.
@@ -6729,7 +6781,7 @@ static void ImGui::RenderWindowOuterBorders(ImGuiWindow* window)
         const ImU32 border_col_resizing = GetColorU32((window->ResizeBorderHeld != -1) ? ImGuiCol_SeparatorActive : ImGuiCol_SeparatorHovered);
         RenderWindowOuterSingleBorder(window, border_n, border_col_resizing, ImMax(2.0f, window->WindowBorderSize)); // Thicker than usual
     }
-    if (g.Style.FrameBorderSize > 0 && !(window->Flags & ImGuiWindowFlags_NoTitleBar))
+    if (!IsWin98ThemeEnabled() && g.Style.FrameBorderSize > 0 && !(window->Flags & ImGuiWindowFlags_NoTitleBar))
     {
         float y = window->Pos.y + window->TitleBarHeight - 1;
         window->DrawList->AddLine(ImVec2(window->Pos.x + border_size * 0.5f, y), ImVec2(window->Pos.x + window->Size.x - border_size * 0.5f, y), border_col, g.Style.FrameBorderSize);
@@ -6849,8 +6901,18 @@ void ImGui::RenderWindowTitleBarContents(ImGuiWindow* window, const ImRect& titl
     float pad_l = style.FramePadding.x;
     float pad_r = style.FramePadding.x;
     float button_sz = g.FontSize;
+    const bool win98_theme_enabled = IsWin98ThemeEnabled();
+    const float win98_button_width = 14.0f;
+    const float win98_button_height = 12.0f;
     ImVec2 close_button_pos;
     ImVec2 collapse_button_pos;
+    bool focused = false;
+    bool pushed_win98_title_font = false;
+    if (win98_theme_enabled)
+    {
+        button_sz = win98_button_width;
+        pad_r = 2.0f;
+    }
     if (has_close_button)
     {
         close_button_pos = ImVec2(title_bar_rect.Max.x - pad_r - button_sz, title_bar_rect.Min.y + style.FramePadding.y);
@@ -6865,6 +6927,38 @@ void ImGui::RenderWindowTitleBarContents(ImGuiWindow* window, const ImRect& titl
     {
         collapse_button_pos = ImVec2(title_bar_rect.Min.x + pad_l, title_bar_rect.Min.y + style.FramePadding.y);
         pad_l += button_sz + style.ItemInnerSpacing.x;
+    }
+
+    if (win98_theme_enabled)
+    {
+        const float button_y = title_bar_rect.Min.y + IM_TRUNC((title_bar_rect.GetHeight() - win98_button_height) * 0.5f);
+        if (has_close_button)
+            close_button_pos.y = button_y;
+        if (has_collapse_button)
+            collapse_button_pos.y = button_y;
+
+        ImU32 col_left = IM_COL32(128, 128, 128, 255);
+        ImU32 col_right = IM_COL32(181, 181, 181, 255);
+
+        focused = IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+        if (focused)
+        {
+            col_left = GetColorU32(ImGuiCol_TitleBgActive);
+
+            ImVec4 secondary = GetStyleColorVec4(ImGuiCol_TitleBgActive);
+            ImVec4 secondary_hsv;
+            ColorConvertRGBtoHSV(secondary.x, secondary.y, secondary.z, secondary_hsv.x, secondary_hsv.y, secondary_hsv.z);
+            secondary_hsv.x -= 0.1f;
+            if (secondary_hsv.x < 0.0f)
+                secondary_hsv.x += 1.0f;
+            secondary_hsv.y *= 0.92f;
+            secondary_hsv.z *= 1.625f;
+            ColorConvertHSVtoRGB(secondary_hsv.x, secondary_hsv.y, secondary_hsv.z, secondary.x, secondary.y, secondary.z);
+
+            col_right = ColorConvertFloat4ToU32(secondary);
+        }
+
+        window->DrawList->AddRectFilledMultiColor(title_bar_rect.Min, title_bar_rect.Max, col_left, col_right, col_right, col_left);
     }
 
     // Collapse button (submitting first so it gets priority when choosing a navigation init fallback)
@@ -6899,6 +6993,17 @@ void ImGui::RenderWindowTitleBarContents(ImGuiWindow* window, const ImRect& titl
         pad_r = ImMax(pad_r, pad_extend * centerness);
     }
 
+    if (win98_theme_enabled)
+    {
+        PushStyleColor(ImGuiCol_Text, focused ? IM_COL32(255, 255, 255, 255) : IM_COL32(192, 192, 192, 255));
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.Fonts->Fonts.Size > 1)
+        {
+            PushFont(io.Fonts->Fonts[1]);
+            pushed_win98_title_font = true;
+        }
+    }
+
     ImRect layout_r(title_bar_rect.Min.x + pad_l, title_bar_rect.Min.y, title_bar_rect.Max.x - pad_r, title_bar_rect.Max.y);
     ImRect clip_r(layout_r.Min.x, layout_r.Min.y, ImMin(layout_r.Max.x + g.Style.ItemInnerSpacing.x, title_bar_rect.Max.x), layout_r.Max.y);
     if (flags & ImGuiWindowFlags_UnsavedDocument)
@@ -6915,6 +7020,13 @@ void ImGui::RenderWindowTitleBarContents(ImGuiWindow* window, const ImRect& titl
     //if (g.IO.KeyShift) window->DrawList->AddRect(layout_r.Min, layout_r.Max, IM_COL32(255, 128, 0, 255)); // [DEBUG]
     //if (g.IO.KeyCtrl) window->DrawList->AddRect(clip_r.Min, clip_r.Max, IM_COL32(255, 128, 0, 255)); // [DEBUG]
     RenderTextClipped(layout_r.Min, layout_r.Max, name, NULL, &text_size, style.WindowTitleAlign, &clip_r);
+
+    if (win98_theme_enabled)
+    {
+        if (pushed_win98_title_font)
+            PopFont();
+        PopStyleColor();
+    }
 }
 
 void ImGui::UpdateWindowParentAndRootLinks(ImGuiWindow* window, ImGuiWindowFlags flags, ImGuiWindow* parent_window)
@@ -7622,7 +7734,19 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
 
         // Title bar
         if (!(flags & ImGuiWindowFlags_NoTitleBar))
-            RenderWindowTitleBarContents(window, ImRect(title_bar_rect.Min.x + window->WindowBorderSize, title_bar_rect.Min.y, title_bar_rect.Max.x - window->WindowBorderSize, title_bar_rect.Max.y), name, p_open);
+        {
+            if (IsWin98ThemeEnabled())
+            {
+                ImRect inset_title_rect = title_bar_rect;
+                inset_title_rect.Min += ImVec2(2.0f, 2.0f);
+                inset_title_rect.Max -= ImVec2(2.0f, 0.0f);
+                RenderWindowTitleBarContents(window, inset_title_rect, name, p_open);
+            }
+            else
+            {
+                RenderWindowTitleBarContents(window, ImRect(title_bar_rect.Min.x + window->WindowBorderSize, title_bar_rect.Min.y, title_bar_rect.Max.x - window->WindowBorderSize, title_bar_rect.Max.y), name, p_open);
+            }
+        }
 
         // Clear hit test shape every frame
         window->HitTestHoleSize.x = window->HitTestHoleSize.y = 0;
@@ -16022,7 +16146,7 @@ bool ImGui::DebugBreakButton(const char* label, const char* description_of_locat
     ColorConvertHSVtoRGB(hsv.x + 0.20f, hsv.y, hsv.z, col4f.x, col4f.y, col4f.z);
 
     RenderNavCursor(bb, id);
-    RenderFrame(bb.Min, bb.Max, GetColorU32(col4f), true, g.Style.FrameRounding);
+    RenderFrame(bb.Min, bb.Max, GetColorU32(col4f), true, g.Style.FrameRounding, true);
     RenderTextClipped(bb.Min, bb.Max, label, NULL, &label_size, g.Style.ButtonTextAlign, &bb);
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, label, g.LastItemData.StatusFlags);

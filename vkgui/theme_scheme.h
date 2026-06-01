@@ -94,6 +94,7 @@ struct ThemeScheme {
 
     std::string name;
     ThemeBaseStyle base_style = ThemeBaseStyle::dark;
+    bool use_win9x_chrome = false;
     int clear_r = 22;
     int clear_g = 22;
     int clear_b = 30;
@@ -131,6 +132,7 @@ struct ThemeCatalog {
 [[nodiscard]] auto parse_theme_style_key(vk::string_view text, ThemeStyleOverrideKey& key) -> bool;
 [[nodiscard]] auto theme_scheme_from_style(vk::string_view name,
                                            ThemeBaseStyle base_style,
+                                           bool use_win9x_chrome,
                                            int clear_r,
                                            int clear_g,
                                            int clear_b,

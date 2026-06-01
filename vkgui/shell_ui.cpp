@@ -215,6 +215,7 @@ void ShellUi::save_current_theme(ConsoleLog& log)
     const int clear_b = clamp_theme_color_byte(theme_editor_clear_color_[2]);
     updated_catalog.schemes[style_index_] = theme_scheme_from_style(string_view_of(current_scheme.name),
                                                                     current_scheme.base_style,
+                                                                    current_scheme.use_win9x_chrome,
                                                                     clear_r,
                                                                     clear_g,
                                                                     clear_b,
