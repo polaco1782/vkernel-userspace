@@ -35,9 +35,11 @@ class SettingsStore {
 public:
     [[nodiscard]] auto open(vk::string_view path) -> bool;
     [[nodiscard]] auto load(PersistedSettings& settings) -> bool;
+    [[nodiscard]] auto load_font_family(int& font_family_index) -> bool;
     [[nodiscard]] auto load_theme_catalog(ThemeCatalog& catalog) -> bool;
     [[nodiscard]] auto save_theme_catalog(const ThemeCatalog& catalog) -> bool;
     [[nodiscard]] auto save(const PersistedSettings& settings) -> bool;
+    [[nodiscard]] auto save_font_family(int font_family_index) -> bool;
 
     [[nodiscard]] auto last_error() const -> const std::string& { return last_error_; }
     [[nodiscard]] auto seeded_default_themes() const -> bool { return seeded_default_themes_; }

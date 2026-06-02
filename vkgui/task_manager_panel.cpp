@@ -11,7 +11,7 @@ namespace {
 
 auto is_idle_task(const vk_task_info_t& task) -> bool
 {
-    return vk::string_view(task.name).compare("idle");
+    return vk::string_view(task.name).compare("idle") == 0;
 }
 
 } // namespace

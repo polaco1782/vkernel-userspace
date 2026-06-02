@@ -1,6 +1,7 @@
 #include "shell_ui.h"
 
 #include "console_log.h"
+#include "icons.h"
 #include "ImGuiNotify.hpp"
 #include "kobj_panel.h"
 #include "launch_registry.h"
@@ -27,6 +28,19 @@ auto theme_name_getter(void* data, int index, const char** out_text) -> bool
     }
 
     *out_text = catalog->schemes[index].name.c_str();
+    return true;
+}
+
+auto font_family_getter(void* /*data*/, int index, const char** out_text) -> bool
+{
+    if (out_text == nullptr) {
+        return false;
+    }
+    if (index < 0 || index >= ui_font_family_count()) {
+        return false;
+    }
+
+    *out_text = ui_font_family_name(ui_font_family_from_index(index));
     return true;
 }
 
@@ -94,12 +108,19 @@ void ShellUi::initialize(const vk_framebuffer_info_t& framebuffer, ConsoleLog* l
                       settings_store_.last_error().c_str());
             push_notification(ImGuiToastType::Warning, 5000, "Failed to load saved settings. Using current defaults.");
         }
+
+        int saved_font_family_index = 0;
+        if (settings_store_.load_font_family(saved_font_family_index)) {
+            font_family_ = ui_font_family_from_index(saved_font_family_index);
+            last_saved_font_family_index_ = ui_font_family_index(font_family_);
+        }
     } else if (log != nullptr) {
         log->addf("vkGUI settings: failed to open /data/vkgui/vkgui_settings.db (%s).",
                   settings_store_.last_error().c_str());
         push_notification(ImGuiToastType::Error, 0, "Settings database could not be opened.");
     }
 
+    (void)apply_font_family(log);
     ImGui_ImplVK_SetTransparencyEnabled(transparency_);
     apply_style();
     ImGui::GetIO().FontGlobalScale = font_scale_;
@@ -145,6 +166,23 @@ auto ShellUi::current_settings_snapshot() const -> PersistedSettings
     settings.show_vkfm = show_vkfm_;
     settings.show_text_editor = show_text_editor_;
     return settings;
+}
+
+auto ShellUi::apply_font_family(ConsoleLog* log) -> bool
+{
+    ImGuiIO& io = ImGui::GetIO();
+    if (!configure_ui_fonts(io, font_family_) || !ImGui_ImplVK_RebuildFontAtlas()) {
+        if (log != nullptr) {
+            log->addf("vkGUI fonts: failed to apply %s.", ui_font_family_name(font_family_));
+        }
+        return false;
+    }
+
+    io.FontGlobalScale = font_scale_;
+    if (log != nullptr) {
+        log->addf("vkGUI fonts: using %s.", ui_font_family_name(font_family_));
+    }
+    return true;
 }
 
 void ShellUi::apply_saved_settings(const PersistedSettings& settings)
@@ -259,43 +297,43 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
         return;
     }
 
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New", "Ctrl+N")) {
+    if (ImGui::BeginMenu(ICON_FA_FILE " File")) {
+        if (ImGui::MenuItem(ICON_FA_FILE_CIRCLE_PLUS " New", "Ctrl+N")) {
             reset_counter(&log, "File > New: counter reset.");
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Drop to Shell")) {
+        if (ImGui::MenuItem(ICON_FA_TERMINAL " Drop to Shell")) {
             request_drop_to_shell(&log, "File > Drop to Shell: replacing vkGUI with /bin/shell.vbin.");
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Quit", "Ctrl+Q")) {
+        if (ImGui::MenuItem(ICON_FA_POWER_OFF " Quit", "Ctrl+Q")) {
             request_quit(&log, "Quit requested via menu.");
         }
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("Edit")) {
-        if (ImGui::MenuItem("Increment Counter", "+")) {
+    if (ImGui::BeginMenu(ICON_FA_PEN_TO_SQUARE " Edit")) {
+        if (ImGui::MenuItem(ICON_FA_ARROW_UP " Increment Counter", "+")) {
             ++counter_;
             log.addf("Counter incremented to %d.", counter_);
         }
-        if (ImGui::MenuItem("Decrement Counter", "-")) {
+        if (ImGui::MenuItem(ICON_FA_ARROW_DOWN " Decrement Counter", "-")) {
             --counter_;
             log.addf("Counter decremented to %d.", counter_);
         }
-        if (ImGui::MenuItem("Reset Counter")) {
+        if (ImGui::MenuItem(ICON_FA_ARROW_ROTATE_RIGHT " Reset Counter")) {
             reset_counter(&log, "Counter reset.");
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Settings...")) {
+        if (ImGui::MenuItem(ICON_FA_GEAR " Settings...")) {
             show_settings_ = true;
             log.add("Opened Settings.");
         }
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("Launch")) {
-        if (ImGui::MenuItem("Refresh App List")) {
+    if (ImGui::BeginMenu(ICON_FA_ROCKET " Launch")) {
+        if (ImGui::MenuItem(ICON_FA_ARROW_ROTATE_RIGHT " Refresh App List")) {
             launch_registry.refresh(log);
             push_notification(ImGuiToastType::Success, 3000, "App list refreshed.");
         }
@@ -303,12 +341,13 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
         ImGui::Separator();
         if (launch_registry.empty()) {
             ImGui::BeginDisabled();
-            ImGui::MenuItem("No staged apps found", nullptr, false, false);
+            ImGui::MenuItem(ICON_FA_BOX_ARCHIVE " No staged apps found", nullptr, false, false);
             ImGui::EndDisabled();
         } else {
             for (int index = 0; index < launch_registry.size(); ++index) {
                 const LaunchMenuEntry& entry = launch_registry.entry(index);
-                if (ImGui::MenuItem(entry.label.c_str())) {
+                const std::string label = icon_label(ICON_FA_PLAY, string_view_of(entry.label));
+                if (ImGui::MenuItem(label.c_str())) {
                     (void)window_manager.launch_windowed_app(string_view_of(entry.path),
                                                              default_app_width_,
                                                              default_app_height_);
@@ -318,24 +357,24 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("View")) {
-        ImGui::MenuItem("Info Panel", nullptr, &show_info_);
-        ImGui::MenuItem("Console", nullptr, &show_console_);
-        ImGui::MenuItem("Task Manager", nullptr, &show_task_manager_);
-        ImGui::MenuItem("KObj Navigator", nullptr, &show_kobj_);
-        ImGui::MenuItem("vkfm", nullptr, &show_vkfm_);
-        ImGui::MenuItem("Text Editor", nullptr, &show_text_editor_);
+    if (ImGui::BeginMenu(ICON_FA_TABLE_CELLS " View")) {
+        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " Info Panel", nullptr, &show_info_);
+        ImGui::MenuItem(ICON_FA_TERMINAL " Console", nullptr, &show_console_);
+        ImGui::MenuItem(ICON_FA_BARS_STAGGERED " Task Manager", nullptr, &show_task_manager_);
+        ImGui::MenuItem(ICON_FA_CUBES " KObj Navigator", nullptr, &show_kobj_);
+        ImGui::MenuItem(ICON_FA_FOLDER_TREE " vkfm", nullptr, &show_vkfm_);
+        ImGui::MenuItem(ICON_FA_FILE_LINES " Text Editor", nullptr, &show_text_editor_);
         if (panel_registry.size() > 0) {
             ImGui::Separator();
             panel_registry.draw_menu_items();
         }
         ImGui::Separator();
-        ImGui::MenuItem("ImGui Demo", nullptr, &show_demo_);
+        ImGui::MenuItem(ICON_FA_WRENCH " ImGui Demo", nullptr, &show_demo_);
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("Help")) {
-        if (ImGui::MenuItem("About vkGUI...")) {
+    if (ImGui::BeginMenu(ICON_FA_CIRCLE_INFO " Help")) {
+        if (ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About vkGUI...")) {
             open_about_ = true;
         }
         ImGui::EndMenu();
@@ -440,7 +479,7 @@ void ShellUi::draw_settings_window(WindowManager& window_manager, ConsoleLog& lo
     }
 
     ImGui::SetNextWindowPos(ImVec2(200.0f, 150.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(310.0f, 215.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(340.0f, 245.0f), ImGuiCond_FirstUseEver);
 
     if (!imgui_begin_window_readable_caption("Settings", &show_settings_, ImGuiWindowFlags_NoResize)) {
         ImGui::End();
@@ -462,6 +501,17 @@ void ShellUi::draw_settings_window(WindowManager& window_manager, ConsoleLog& lo
             discard_theme_editor_changes();
             show_theme_editor_ = true;
             log.addf("Opened Theme Editor for %s.", theme_catalog_.schemes[style_index_].name.c_str());
+        }
+    }
+
+    int font_family_index = ui_font_family_index(font_family_);
+    if (ImGui::Combo("Font family", &font_family_index, font_family_getter, nullptr, ui_font_family_count())) {
+        const UiFontFamily previous_family = font_family_;
+        font_family_ = ui_font_family_from_index(font_family_index);
+        if (!apply_font_family(&log)) {
+            font_family_ = previous_family;
+            (void)apply_font_family(&log);
+            push_notification(ImGuiToastType::Error, 4000, "Failed to switch font family.");
         }
     }
 
@@ -579,7 +629,8 @@ void ShellUi::sync_settings(ConsoleLog& log)
     }
 
     const PersistedSettings current = current_settings_snapshot();
-    if (current.compare(last_saved_settings_)) {
+    const int current_font_family_index = ui_font_family_index(font_family_);
+    if (current.compare(last_saved_settings_) && current_font_family_index == last_saved_font_family_index_) {
         return;
     }
 
@@ -590,8 +641,16 @@ void ShellUi::sync_settings(ConsoleLog& log)
         push_notification(ImGuiToastType::Warning, 5000, "Settings autosave failed and was disabled.");
         return;
     }
+    if (!settings_store_.save_font_family(current_font_family_index)) {
+        log.addf("vkGUI settings: failed to save font family (%s).",
+                 settings_store_.last_error().c_str());
+        settings_store_ready_ = false;
+        push_notification(ImGuiToastType::Warning, 5000, "Font preference autosave failed and was disabled.");
+        return;
+    }
 
     last_saved_settings_ = current;
+    last_saved_font_family_index_ = current_font_family_index;
 }
 
 void ShellUi::draw(PluginHost& plugin_host,

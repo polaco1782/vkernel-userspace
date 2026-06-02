@@ -2,75 +2,77 @@
 
 #include "console_log.h"
 
-#include <stdio.h>
+#include <string.h>
 
 namespace vkgui {
 
 namespace {
 
-constexpr auto k_manifest_path = "/data/vkgui/vkgui_apps.txt";
-constexpr auto k_fallback_manifest_path = "/data/shell/shell.txt";
+constexpr auto k_bin_directory_path = "/bin";
 
 } // namespace
 
-auto LaunchRegistry::load_from_file(vk::string_view path) -> bool
+auto LaunchRegistry::load_from_bin_directory(ConsoleLog& log) -> bool
 {
-    const std::string path_string = string_from_view(path);
-    const vk_file_handle_t handle = VK_CALL(file_open, path_string.c_str(), "r");
-    if (handle == static_cast<vk_file_handle_t>(0)) {
+    std::string first_file_name;
+    int file_count = 0;
+
+    memset(response_.data(), 0, response_.size());
+    memset(raw_items_.data(), 0, sizeof(raw_items_));
+
+    vk_kobj_rpc_path_json("fs_list", k_bin_directory_path, response_.data(), response_.size());
+    if (!vk_kobj_response_ok(response_.data())) {
+        std::array<char, 128> error {};
+        if (json_extract_string(response_.data(), "error", error)) {
+            log.addf("Launch menu: failed to scan %s (%s).", k_bin_directory_path, error.data());
+        } else {
+            log.addf("Launch menu: failed to scan %s.", k_bin_directory_path);
+        }
         return false;
     }
 
-    std::array<char, 256> chunk {};
-    std::string line;
-    vk_usize read_count = 0;
-
-    while ((read_count = VK_CALL(file_read_handle, handle, chunk.data(), chunk.size())) > 0) {
-        for (vk_usize index = 0; index < read_count; ++index) {
-            const char ch = chunk[index];
-            if (ch == '\r') {
-                continue;
-            }
-
-            if (ch == '\n') {
-                parse_launch_line(string_view_of(line));
-                line.clear();
-                continue;
-            }
-
-            line.push_back(ch);
+    const int item_count = vk_json_extract_string_array_field(response_.data(),
+                                                              "items",
+                                                              &raw_items_[0][0],
+                                                              static_cast<vk_usize>(k_item_len),
+                                                              k_items_max);
+    for (int index = 0; index < item_count; ++index) {
+        DirectoryListEntry item {};
+        if (!parse_directory_list_item(raw_items_[index].data(), item)) {
+            continue;
         }
+        if (item.is_directory) {
+            continue;
+        }
+
+        ++file_count;
+        if (first_file_name.empty()) {
+            first_file_name = item.name;
+        }
+        if (!is_vbin_program_path(item.name)) {
+            continue;
+        }
+
+        std::string path = k_bin_directory_path;
+        path.push_back('/');
+        path += item.name;
+        add_app(string_view_of(path));
     }
 
-    if (!line.empty()) {
-        parse_launch_line(string_view_of(line));
+    if (count_ == 0 && file_count > 0) {
+        log.addf("Launch menu: scanned %d file%s in %s but none matched executable naming; first entry was '%s'.",
+                 file_count,
+                 file_count == 1 ? "" : "s",
+                 k_bin_directory_path,
+                 first_file_name.c_str());
     }
 
-    VK_CALL(file_close, handle);
     return true;
-}
-
-void LaunchRegistry::parse_launch_line(vk::string_view line)
-{
-    std::string trimmed = trim_ascii(line);
-    if (trimmed.empty() || trimmed[0] == '#') {
-        return;
-    }
-
-    vk::string_view path = string_view_of(trimmed);
-    if (starts_with(path, "run") && path.size() > 3 && is_ascii_space(path[3])) {
-        path.remove_prefix(3);
-        while (!path.empty() && is_ascii_space(path[0])) {
-            path.remove_prefix(1);
-        }
-    }
-
-    add_app(path);
 }
 
 void LaunchRegistry::add_app(vk::string_view path)
 {
-    if (path.empty() || !ends_with(path, ".vbin") || count_ >= k_capacity || exists(path)) {
+    if (path.empty() || !is_vbin_program_path(string_from_view(path)) || count_ >= k_capacity || exists(path)) {
         return;
     }
 
@@ -82,7 +84,7 @@ void LaunchRegistry::add_app(vk::string_view path)
 auto LaunchRegistry::exists(vk::string_view path) const -> bool
 {
     for (int index = 0; index < count_; ++index) {
-        if (string_equals(entries_[index].path, path)) {
+        if (view_equals(entries_[index].path, path)) {
             return true;
         }
     }
@@ -107,24 +109,19 @@ void LaunchRegistry::refresh(ConsoleLog& log)
 {
     count_ = 0;
 
-    const char* source = nullptr;
-    if (load_from_file(k_manifest_path)) {
-        source = k_manifest_path;
-    } else if (load_from_file(k_fallback_manifest_path)) {
-        source = k_fallback_manifest_path;
-    }
+    const bool scanned = load_from_bin_directory(log);
 
     sort();
 
-    if (source != nullptr && count_ > 0) {
+    if (scanned && count_ > 0) {
         log.addf("Launch menu loaded %d app%s from %s.",
                  count_,
                  count_ == 1 ? "" : "s",
-                 source);
-    } else if (source != nullptr) {
-        log.addf("Launch menu file %s did not contain any runnable apps.", source);
+                 k_bin_directory_path);
+    } else if (scanned) {
+        log.addf("Launch menu scan of %s did not find any runnable apps.", k_bin_directory_path);
     } else {
-        log.add("Launch menu file not found.");
+        log.addf("Launch menu scan of %s failed.", k_bin_directory_path);
     }
 }
 

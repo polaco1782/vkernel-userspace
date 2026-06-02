@@ -4,10 +4,11 @@
  */
 
 #include "console_log.h"
+#include "font_catalog.h"
+#include "icons.h"
 #include "implot.h"
 #include "kobj_panel.h"
 #include "deps/imguinotify/fa-solid-900.h"
-#include "deps/imguinotify/IconsFontAwesome6.h"
 #include "ImGuiNotify.hpp"
 #include "launch_registry.h"
 #include "plugin_registry.h"
@@ -48,23 +49,11 @@ int main(int /*argc*/, char** /*argv*/)
         io.LogFilename = nullptr;
     }
 
-    /* Add FontAwesome 6 icons merged into the default font so ImGuiNotify
-     * can render its ✓ / ⚠ / ✗ / ℹ icons.  This must happen before
-     * ImGui_ImplVK_Init() which calls io.Fonts->Build() internally. */
+    /* Merge the vendored IconFontCppHeaders Font Awesome map before backend
+     * init so menus, vkfm tiles, and notifications all share the same glyphs. */
     {
         ImGuiIO& io = ImGui::GetIO();
-        io.Fonts->AddFontDefault();
-        constexpr float  base_size  = 16.0f;
-        constexpr float  icon_size  = base_size * 2.0f / 3.0f;
-        static constexpr ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_16_FA, 0 };
-        ImFontConfig icon_cfg;
-        icon_cfg.MergeMode        = true;
-        icon_cfg.PixelSnapH       = true;
-        icon_cfg.GlyphMinAdvanceX = icon_size;
-        io.Fonts->AddFontFromMemoryCompressedTTF(
-            fa_solid_900_compressed_data,
-            fa_solid_900_compressed_size,
-            icon_size, &icon_cfg, icon_ranges);
+        (void)vkgui::configure_ui_fonts(io, vkgui::UiFontFamily::default_builtin);
     }
 
     if (!ImGui_ImplVK_Init(&framebuffer)) {

@@ -9,6 +9,7 @@
 #include "vkernel/unique_ptr.h"
 
 #include <array>
+#include <stdio.h>
 #include <string>
 
 namespace vkgui {
@@ -18,6 +19,27 @@ inline constexpr vk_usize k_not_found = static_cast<vk_usize>(-1);
 inline auto is_ascii_space(char ch) -> bool
 {
     return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+}
+
+inline auto ascii_lower(char ch) -> char
+{
+    if (ch >= 'A' && ch <= 'Z') {
+        return static_cast<char>(ch - 'A' + 'a');
+    }
+    return ch;
+}
+
+inline auto ascii_length(const char* text) -> vk_usize
+{
+    if (text == nullptr) {
+        return 0;
+    }
+
+    vk_usize length = 0;
+    while (text[length] != '\0') {
+        ++length;
+    }
+    return length;
 }
 
 inline auto string_from_view(vk::string_view view) -> std::string
@@ -93,14 +115,39 @@ inline auto string_equals(vk::string_view lhs, vk::string_view rhs) -> bool
     return lhs.compare(rhs);
 }
 
+inline auto view_equals(vk::string_view lhs, vk::string_view rhs) -> bool
+{
+    return lhs.compare(rhs) == 0;
+}
+
 inline auto string_equals(const std::string& lhs, vk::string_view rhs) -> bool
 {
     return string_equals(string_view_of(lhs), rhs);
 }
 
-inline auto starts_with(vk::string_view text, vk::string_view prefix) -> bool
+inline auto string_equals(vk::string_view lhs, const char* rhs) -> bool
 {
-    return text.starts_with(prefix);
+    return string_equals(lhs, vk::string_view(rhs));
+}
+
+inline auto string_equals(const std::string& lhs, const char* rhs) -> bool
+{
+    return string_equals(string_view_of(lhs), vk::string_view(rhs));
+}
+
+inline auto view_equals(const std::string& lhs, vk::string_view rhs) -> bool
+{
+    return view_equals(string_view_of(lhs), rhs);
+}
+
+inline auto view_equals(vk::string_view lhs, const char* rhs) -> bool
+{
+    return view_equals(lhs, vk::string_view(rhs));
+}
+
+inline auto view_equals(const std::string& lhs, const char* rhs) -> bool
+{
+    return view_equals(string_view_of(lhs), vk::string_view(rhs));
 }
 
 inline auto ends_with(vk::string_view text, vk::string_view suffix) -> bool
@@ -109,7 +156,7 @@ inline auto ends_with(vk::string_view text, vk::string_view suffix) -> bool
         return false;
     }
 
-    return subview(text, text.size() - suffix.size(), suffix.size()).compare(suffix);
+    return subview(text, text.size() - suffix.size(), suffix.size()).compare(suffix) == 0;
 }
 
 inline auto path_basename(vk::string_view path) -> vk::string_view
@@ -122,6 +169,97 @@ inline auto path_basename(vk::string_view path) -> vk::string_view
     }
 
     return subview(path, start, path.size() - start);
+}
+
+inline auto ends_with_ignore_case(vk::string_view text, vk::string_view suffix) -> bool
+{
+    if (suffix.size() > text.size()) {
+        return false;
+    }
+
+    const vk_usize start = text.size() - suffix.size();
+    for (vk_usize index = 0; index < suffix.size(); ++index) {
+        if (ascii_lower(text[start + index]) != ascii_lower(suffix[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline auto compare_casefolded(const char* lhs, const char* rhs) -> int
+{
+    if (lhs == nullptr && rhs == nullptr) {
+        return 0;
+    }
+    if (lhs == nullptr) {
+        return -1;
+    }
+    if (rhs == nullptr) {
+        return 1;
+    }
+
+    while (*lhs != '\0' || *rhs != '\0') {
+        const char lhs_ch = ascii_lower(*lhs);
+        const char rhs_ch = ascii_lower(*rhs);
+        if (lhs_ch != rhs_ch) {
+            return static_cast<unsigned char>(lhs_ch) < static_cast<unsigned char>(rhs_ch) ? -1 : 1;
+        }
+        if (*lhs != '\0') {
+            ++lhs;
+        }
+        if (*rhs != '\0') {
+            ++rhs;
+        }
+    }
+
+    return 0;
+}
+
+inline auto ends_with_casefolded(const char* text, const char* suffix) -> bool
+{
+    if (text == nullptr || suffix == nullptr) {
+        return false;
+    }
+
+    const vk_usize text_length = ascii_length(text);
+    const vk_usize suffix_length = ascii_length(suffix);
+    if (suffix_length == 0 || suffix_length > text_length) {
+        return false;
+    }
+
+    return compare_casefolded(text + (text_length - suffix_length), suffix) == 0;
+}
+
+inline auto path_basename(const char* path) -> const char*
+{
+    if (path == nullptr || path[0] == '\0') {
+        return "";
+    }
+
+    const char* basename = path;
+    for (const char* cursor = path; *cursor != '\0'; ++cursor) {
+        if (*cursor == '/' || *cursor == '\\') {
+            basename = cursor + 1;
+        }
+    }
+    return basename;
+}
+
+inline auto is_vbin_program_path(const char* path) -> bool
+{
+    const char* basename = path_basename(path);
+    return basename[0] != '\0' && ends_with_casefolded(basename, ".vbin");
+}
+
+inline auto is_vbin_program_path(vk::string_view path) -> bool
+{
+    const vk::string_view basename = path_basename(path);
+    return !basename.empty() && ends_with_ignore_case(basename, ".vbin");
+}
+
+inline auto is_vbin_program_path(const std::string& path) -> bool
+{
+    return is_vbin_program_path(path.c_str());
 }
 
 inline auto trim_ascii(vk::string_view text) -> std::string
@@ -137,6 +275,60 @@ inline auto trim_ascii(vk::string_view text) -> std::string
     }
 
     return string_from_view(subview(text, start, end - start));
+}
+
+inline auto format_byte_size(vk_u64 size) -> std::string
+{
+    if (size < 1024ULL) {
+        return string_from_i64(static_cast<long long>(size)) + " B";
+    }
+
+    static constexpr const char* units[] = {
+        "KB",
+        "MB",
+        "GB",
+        "TB",
+    };
+
+    vk_u64 whole = size;
+    vk_u64 remainder = 0;
+    size_t divisions = 0;
+    while (whole >= 1024ULL && divisions < std::size(units)) {
+        remainder = whole % 1024ULL;
+        whole /= 1024ULL;
+        ++divisions;
+    }
+    if (divisions == 0) {
+        return string_from_i64(static_cast<long long>(size)) + " B";
+    }
+
+    std::array<char, 32> buffer {};
+    const unsigned decimal = static_cast<unsigned>((remainder * 10ULL) / 1024ULL);
+    if (whole >= 100ULL || decimal == 0U) {
+        snprintf(buffer.data(), buffer.size(), "%llu %s",
+                 static_cast<unsigned long long>(whole),
+                 units[divisions - 1]);
+    } else {
+        snprintf(buffer.data(), buffer.size(), "%llu.%u %s",
+                 static_cast<unsigned long long>(whole),
+                 decimal,
+                 units[divisions - 1]);
+    }
+    return string_from_buffer(buffer);
+}
+
+inline auto truncate_with_ellipsis(vk::string_view text, vk_usize max_chars) -> std::string
+{
+    if (text.size() <= max_chars) {
+        return string_from_view(text);
+    }
+    if (max_chars <= 3) {
+        return std::string(max_chars, '.');
+    }
+
+    std::string shortened = string_from_view(subview(text, 0, max_chars - 3));
+    shortened += "...";
+    return shortened;
 }
 
 inline auto read_file_bytes(vk::string_view path, std::string& bytes) -> bool
@@ -264,6 +456,59 @@ inline auto parse_u64(vk::string_view text) -> vk_u64
     }
 
     return value;
+}
+
+struct DirectoryListEntry {
+    std::string name;
+    bool is_directory = false;
+    vk_u64 size = 0;
+};
+
+inline auto parse_directory_list_item(const char* record, DirectoryListEntry& out) -> bool
+{
+    if (record == nullptr || (record[0] != 'D' && record[0] != 'F') || record[1] != '\t') {
+        return false;
+    }
+
+    const char* second_tab = record + 2;
+    while (*second_tab != '\0' && *second_tab != '\t') {
+        ++second_tab;
+    }
+    if (*second_tab != '\t' || second_tab <= record + 2) {
+        return false;
+    }
+
+    out = DirectoryListEntry {};
+    out.name.assign(record + 2, static_cast<size_t>(second_tab - (record + 2)));
+    out.is_directory = record[0] == 'D';
+    out.size = parse_u64(vk::string_view(second_tab + 1));
+    return !out.name.empty();
+}
+
+inline auto parse_directory_list_item(vk::string_view record, DirectoryListEntry& out) -> bool
+{
+    if (record.size() < 4 || record[1] != '\t') {
+        return false;
+    }
+
+    vk_usize second_tab = k_not_found;
+    for (vk_usize index = 2; index < record.size(); ++index) {
+        if (record[index] == '\t') {
+            second_tab = index;
+            break;
+        }
+    }
+    if (second_tab == k_not_found || second_tab <= 2) {
+        return false;
+    }
+    if (record[0] != 'D' && record[0] != 'F') {
+        return false;
+    }
+
+    out.is_directory = record[0] == 'D';
+    out.name = string_from_view(subview(record, 2, second_tab - 2));
+    out.size = parse_u64(subview(record, second_tab + 1, record.size() - second_tab - 1));
+    return !out.name.empty();
 }
 
 template <size_t N>

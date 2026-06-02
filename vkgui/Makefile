@@ -27,6 +27,8 @@ IMPLOT_DIR      := ./deps/implot
 SQLITE_DIR      := ./deps/sqlite3
 NOTIFY_DIR      := ./deps/imguinotify
 TEXTEDITOR_DIR  := ./deps/imguicolortextedit
+ICONFONT_DIR    := ./deps/iconfontcppheaders
+FONTS_DIR       := ./deps/fonts
 PLUGIN_DIR      := ./plugins
 RUNTIME_PLUGIN_DIR := ./runtime_plugins
 
@@ -168,6 +170,7 @@ PLUGIN_SRCS := $(sort $(wildcard $(PLUGIN_DIR)/*.cpp))
 
 OUR_SRCS   := console_log.cpp        \
 			  dynamic_plugin_loader.cpp \
+			  font_catalog.cpp      \
 			  imgui_impl_vk.cpp      \
 			  kobj_panel.cpp         \
 			  launch_registry.cpp    \
@@ -194,7 +197,7 @@ TARGET     := vkgui.vbin
 
 .PHONY: all clean distclean help libc_build cpp_build runtime_plugins_build
 
-all: _check_imgui _check_implot _check_texteditor _check_sysroot runtime_plugins_build $(TARGET)
+all: _check_imgui _check_implot _check_texteditor _check_iconfont _check_fonts _check_sysroot runtime_plugins_build $(TARGET)
 
 help:
 	@echo "vkgui build targets:"
@@ -228,6 +231,20 @@ _check_texteditor:
 	    { echo ""; \
 	      echo "  ERROR: vendored ImGuiColorTextEdit sources not found in $(TEXTEDITOR_DIR)/"; \
 	      echo "  Restore the tracked deps/imguicolortextedit/ tree."; \
+	      echo ""; exit 1; }
+
+_check_iconfont:
+	@test -f $(ICONFONT_DIR)/IconsFontAwesome6.h || \
+	    { echo ""; \
+	      echo "  ERROR: vendored IconFontCppHeaders files not found in $(ICONFONT_DIR)/"; \
+	      echo "  Restore the tracked deps/iconfontcppheaders/ tree."; \
+	      echo ""; exit 1; }
+
+_check_fonts:
+	@test -f $(FONTS_DIR)/dejavu_sans.h || \
+	    { echo ""; \
+	      echo "  ERROR: vendored font headers not found in $(FONTS_DIR)/"; \
+	      echo "  Restore the tracked deps/fonts/ tree."; \
 	      echo ""; exit 1; }
 
 _check_sysroot:

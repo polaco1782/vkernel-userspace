@@ -1,6 +1,7 @@
 #ifndef VKGUI_SHELL_UI_H
 #define VKGUI_SHELL_UI_H
 
+#include "font_catalog.h"
 #include "settings_store.h"
 #include "vkgui_common.h"
 
@@ -35,6 +36,7 @@ public:
 private:
     [[nodiscard]] auto current_settings_snapshot() const -> PersistedSettings;
     void apply_style();
+    [[nodiscard]] auto apply_font_family(ConsoleLog* log = nullptr) -> bool;
     void apply_saved_settings(const PersistedSettings& settings);
     void load_theme_editor_from_selected_scheme();
     void discard_theme_editor_changes();
@@ -67,6 +69,7 @@ private:
 
     ThemeCatalog theme_catalog_ {};
     int style_index_ = 0;
+    UiFontFamily font_family_ = UiFontFamily::default_builtin;
     float font_scale_ = 1.0f;
     bool transparency_ = false;
     std::array<float, 3> theme_editor_clear_color_ {{ 22.0f / 255.0f, 22.0f / 255.0f, 30.0f / 255.0f }};
@@ -74,6 +77,7 @@ private:
 
     SettingsStore settings_store_;
     PersistedSettings last_saved_settings_ {};
+    int last_saved_font_family_index_ = 0;
     bool settings_store_ready_ = false;
 };
 

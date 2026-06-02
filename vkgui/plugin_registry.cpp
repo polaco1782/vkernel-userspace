@@ -20,36 +20,6 @@ constexpr vk_usize k_plugin_response_max = (static_cast<vk_usize>(k_plugin_item_
                                           * static_cast<vk_usize>(k_plugin_items_max))
                                          + k_plugin_response_overhead;
 
-struct directory_item {
-    std::string name;
-    bool is_directory = false;
-};
-
-auto parse_directory_item(vk::string_view record, directory_item& out) -> bool
-{
-    if (record.size() < 4 || record[1] != '\t') {
-        return false;
-    }
-
-    vk_usize second_tab = k_not_found;
-    for (vk_usize index = 2; index < record.size(); ++index) {
-        if (record[index] == '\t') {
-            second_tab = index;
-            break;
-        }
-    }
-    if (second_tab == k_not_found || second_tab <= 2) {
-        return false;
-    }
-    if (record[0] != 'D' && record[0] != 'F') {
-        return false;
-    }
-
-    out.is_directory = record[0] == 'D';
-    out.name = string_from_view(subview(record, 2, second_tab - 2));
-    return !out.name.empty();
-}
-
 auto join_plugin_path(vk::string_view name) -> std::string
 {
     std::string path = k_plugin_directory_path;
@@ -182,8 +152,8 @@ void PanelRegistry::load_external_plugins(PluginHost& host)
                                                               k_plugin_items_max);
 
     for (int index = 0; index < item_count; ++index) {
-        directory_item item {};
-        if (!parse_directory_item(buffer_view(raw_items[index]), item)) {
+        DirectoryListEntry item {};
+        if (!parse_directory_list_item(buffer_view(raw_items[index]), item)) {
             continue;
         }
         if (item.is_directory || !ends_with(string_view_of(item.name), k_plugin_suffix)) {

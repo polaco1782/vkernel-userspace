@@ -79,6 +79,10 @@ void ImGui_ImplVK_SetClearColor(unsigned int r, unsigned int g, unsigned int b)
 
 static void framebuffer_image_callback(const ImDrawList*, const ImDrawCmd*) {}
 
+static inline unsigned char sample_alpha8(const unsigned char* tex,
+                                          int tw, int th,
+                                          float u, float v);
+
 void ImGui_ImplVK_AddFramebufferImage(ImDrawList* draw_list,
                                       const ImGui_ImplVK_FramebufferImage* image)
 {
@@ -143,6 +147,22 @@ bool ImGui_ImplVK_Init(const vk_framebuffer_info_t* fb)
     io.Fonts->SetTexID((ImTextureID)(intptr_t)1); /* dummy non-null ID */
 
     return true;
+}
+
+bool ImGui_ImplVK_RebuildFontAtlas()
+{
+    ImGui_ImplVK_Data* bd = get_bd();
+    if (bd == nullptr) {
+        return false;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Build();
+    io.Fonts->GetTexDataAsAlpha8(&bd->font_pixels,
+                                 &bd->font_tex_w,
+                                 &bd->font_tex_h);
+    io.Fonts->SetTexID((ImTextureID)(intptr_t)1);
+    return bd->font_pixels != nullptr && bd->font_tex_w > 0 && bd->font_tex_h > 0;
 }
 
 void ImGui_ImplVK_Shutdown()
@@ -588,7 +608,6 @@ static bool try_render_quad(
         unpack_imgui_col(col, &cr, &cg, &cb, &ca);
         float fva  = (float)ca * (1.0f / (255.0f * 255.0f));
         float fcr  = (float)cr, fcg = (float)cg, fcb = (float)cb;
-        float ftw_f = (float)ftw, fth_f = (float)fth;
 
         float v_row = v_top + ((float)y0 + 0.5f - miny) * dv_dy;
         float u_base = u_left + ((float)x0 + 0.5f - minx) * du_dx;
@@ -597,28 +616,19 @@ static bool try_render_quad(
             float su = u_base;
             unsigned int* row = fb + py * fb_stride;
             for (int px = x0; px < x1; ++px) {
-                int tx = (int)(su * ftw_f);
-                int ty = (int)(v_row * fth_f);
-                if (tx < 0) tx = 0; else if (tx >= ftw) tx = ftw - 1;
-                if (ty < 0) ty = 0; else if (ty >= fth) ty = fth - 1;
-                unsigned char ta_s = ftex[ty * ftw + tx];
+                unsigned char ta_s = sample_alpha8(ftex, ftw, fth, su, v_row);
                 if (ta_s > 0) {
-                    if (g_blend_enabled) {
-                        float alpha = (float)ta_s * fva;
-                        if (alpha >= 0.999f) {
-                            row[px] = pack_px(cr, cg, cb, fmt);
-                        } else {
-                            float inv_a = 1.0f - alpha;
-                            unsigned int dr, dg, db;
-                            unpack_px(row[px], fmt, &dr, &dg, &db);
-                            unsigned int or_ = (unsigned int)(fcr * alpha + (float)dr * inv_a + 0.5f); if (or_ > 255u) or_ = 255u;
-                            unsigned int og  = (unsigned int)(fcg * alpha + (float)dg * inv_a + 0.5f); if (og  > 255u) og  = 255u;
-                            unsigned int ob  = (unsigned int)(fcb * alpha + (float)db * inv_a + 0.5f); if (ob  > 255u) ob  = 255u;
-                            row[px] = pack_px(or_, og, ob, fmt);
-                        }
-                    } else {
-                        /* Opaque write — no alpha blending. */
+                    float alpha = (float)ta_s * fva;
+                    if (alpha >= 0.999f) {
                         row[px] = pack_px(cr, cg, cb, fmt);
+                    } else {
+                        float inv_a = 1.0f - alpha;
+                        unsigned int dr, dg, db;
+                        unpack_px(row[px], fmt, &dr, &dg, &db);
+                        unsigned int or_ = (unsigned int)(fcr * alpha + (float)dr * inv_a + 0.5f); if (or_ > 255u) or_ = 255u;
+                        unsigned int og  = (unsigned int)(fcg * alpha + (float)dg * inv_a + 0.5f); if (og  > 255u) og  = 255u;
+                        unsigned int ob  = (unsigned int)(fcb * alpha + (float)db * inv_a + 0.5f); if (ob  > 255u) ob  = 255u;
+                        row[px] = pack_px(or_, og, ob, fmt);
                     }
                 }
                 su += du_dx;
@@ -643,18 +653,69 @@ static inline float edge_fn(float ax, float ay,
     return (cx - ax) * (by - ay) - (cy - ay) * (bx - ax);
 }
 
-/* Sample alpha-8 font texture, nearest-neighbor, clamp to border. */
+/* Sample alpha-8 font texture with bilinear filtering so font edges keep
+ * their anti-aliased coverage instead of snapping to one source texel. */
 static inline unsigned char sample_alpha8(const unsigned char* tex,
-                                           int tw, int th,
-                                           float u, float v)
+                                          int tw, int th,
+                                          float u, float v)
 {
-    int tx = (int)(u * (float)tw);
-    int ty = (int)(v * (float)th);
-    if (tx < 0)        tx = 0;
-    else if (tx >= tw) tx = tw - 1;
-    if (ty < 0)        ty = 0;
-    else if (ty >= th) ty = th - 1;
-    return tex[ty * tw + tx];
+    float x = (u * (float)tw) - 0.5f;
+    float y = (v * (float)th) - 0.5f;
+
+    int x0 = (int)x;
+    int y0 = (int)y;
+    float fx = x - (float)x0;
+    float fy = y - (float)y0;
+
+    if (fx < 0.0f) {
+        fx += 1.0f;
+        --x0;
+    }
+    if (fy < 0.0f) {
+        fy += 1.0f;
+        --y0;
+    }
+
+    int x1 = x0 + 1;
+    int y1 = y0 + 1;
+    if (x0 < 0) {
+        x0 = 0;
+    } else if (x0 >= tw) {
+        x0 = tw - 1;
+    }
+    if (x1 < 0) {
+        x1 = 0;
+    } else if (x1 >= tw) {
+        x1 = tw - 1;
+    }
+    if (y0 < 0) {
+        y0 = 0;
+    } else if (y0 >= th) {
+        y0 = th - 1;
+    }
+    if (y1 < 0) {
+        y1 = 0;
+    } else if (y1 >= th) {
+        y1 = th - 1;
+    }
+
+    const float w00 = (1.0f - fx) * (1.0f - fy);
+    const float w10 = fx * (1.0f - fy);
+    const float w01 = (1.0f - fx) * fy;
+    const float w11 = fx * fy;
+
+    const float s00 = (float)tex[y0 * tw + x0];
+    const float s10 = (float)tex[y0 * tw + x1];
+    const float s01 = (float)tex[y1 * tw + x0];
+    const float s11 = (float)tex[y1 * tw + x1];
+    const float sample = s00 * w00 + s10 * w10 + s01 * w01 + s11 * w11;
+    if (sample <= 0.0f) {
+        return 0;
+    }
+    if (sample >= 255.0f) {
+        return 255;
+    }
+    return (unsigned char)(sample + 0.5f);
 }
 
 /*
@@ -863,17 +924,12 @@ static void rasterize_triangle(
             /* Coverage test: w2 = 1 - w0 - w1 */
             if (w0 >= -0.001f && w1 >= -0.001f && (1.0f - w0 - w1) >= -0.001f) {
 
-                /* Texture sample (integer UV, no division) */
-                int tx = (int)(su * ftw_f);
-                int ty = (int)(sv * fth_f);
-                if (tx < 0) tx = 0; else if (tx >= ftw) tx = ftw - 1;
-                if (ty < 0) ty = 0; else if (ty >= fth) ty = fth - 1;
-                unsigned char ta = ftex[ty * ftw + tx];
+                unsigned char ta = sample_alpha8(ftex, ftw, fth, su, sv);
 
                 float alpha = sa * (float)ta * (1.0f / (255.0f * 255.0f));
 
                 if (alpha >= 0.002f) {
-                    if (!g_blend_enabled || alpha >= 0.999f) {
+                    if (alpha >= 0.999f) {
                         /* ---- Opaque write: skip read-modify-write ---- */
                         unsigned int fr  = (unsigned int)(sr + 0.5f); if (fr  > 255u) fr  = 255u;
                         unsigned int fg  = (unsigned int)(sg + 0.5f); if (fg  > 255u) fg  = 255u;

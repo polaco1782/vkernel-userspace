@@ -26,6 +26,7 @@
  * Returns false on failure (no memory).
  */
 bool ImGui_ImplVK_Init(const vk_framebuffer_info_t* fb);
+bool ImGui_ImplVK_RebuildFontAtlas();
 
 /* Tear down — call before ImGui::DestroyContext(). */
 void ImGui_ImplVK_Shutdown();

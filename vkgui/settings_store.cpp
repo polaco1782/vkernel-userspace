@@ -184,6 +184,29 @@ auto SettingsStore::load(PersistedSettings& settings) -> bool
     }
 }
 
+auto SettingsStore::load_font_family(int& font_family_index) -> bool
+{
+    SQLiteStatement statement;
+    if (!database_.prepare("SELECT value FROM settings WHERE key = 'font_family';", statement)) {
+        set_error_from_db();
+        return false;
+    }
+
+    const SQLiteStatement::StepResult result = statement.step();
+    if (result == SQLiteStatement::StepResult::done) {
+        last_error_.clear();
+        return true;
+    }
+    if (result == SQLiteStatement::StepResult::error) {
+        last_error_ = statement.last_error();
+        return false;
+    }
+
+    font_family_index = static_cast<int>(parse_i64(string_view_of(statement.column_text(0))));
+    last_error_.clear();
+    return true;
+}
+
 auto SettingsStore::load_theme_catalog(ThemeCatalog& catalog) -> bool
 {
     catalog = ThemeCatalog();
@@ -359,6 +382,16 @@ auto SettingsStore::save(const PersistedSettings& settings) -> bool
     if (!database_.exec("COMMIT;")) {
         set_error_from_db();
         (void)database_.exec("ROLLBACK;");
+        return false;
+    }
+
+    last_error_.clear();
+    return true;
+}
+
+auto SettingsStore::save_font_family(int font_family_index) -> bool
+{
+    if (!store_value("font_family", font_family_index)) {
         return false;
     }
 
