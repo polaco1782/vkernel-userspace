@@ -15,6 +15,7 @@ struct PersistedSettings {
     bool show_task_manager = false;
     bool show_kobj = false;
     bool show_vkfm = false;
+    bool show_text_editor = false;
 
     [[nodiscard]] auto compare(const PersistedSettings& other) const -> bool
     {
@@ -25,7 +26,8 @@ struct PersistedSettings {
             && show_console == other.show_console
             && show_task_manager == other.show_task_manager
             && show_kobj == other.show_kobj
-            && show_vkfm == other.show_vkfm;
+            && show_vkfm == other.show_vkfm
+            && show_text_editor == other.show_text_editor;
     }
 };
 

@@ -178,6 +178,8 @@ auto SettingsStore::load(PersistedSettings& settings) -> bool
             settings.show_kobj = parse_bool(value_view);
         } else if (string_equals(key_view, "show_vkfm")) {
             settings.show_vkfm = parse_bool(value_view);
+        } else if (string_equals(key_view, "show_text_editor")) {
+            settings.show_text_editor = parse_bool(value_view);
         }
     }
 }
@@ -346,7 +348,8 @@ auto SettingsStore::save(const PersistedSettings& settings) -> bool
         && store_value("show_console", settings.show_console)
         && store_value("show_task_manager", settings.show_task_manager)
         && store_value("show_kobj", settings.show_kobj)
-        && store_value("show_vkfm", settings.show_vkfm);
+        && store_value("show_vkfm", settings.show_vkfm)
+        && store_value("show_text_editor", settings.show_text_editor);
 
     if (!ok) {
         (void)database_.exec("ROLLBACK;");

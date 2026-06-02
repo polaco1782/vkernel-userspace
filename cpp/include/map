@@ -57,6 +57,24 @@ public:
         return values_.back().second;
     }
 
+    T& at(const Key& key)
+    {
+        iterator it = find(key);
+        if (it != end()) {
+            return it->second;
+        }
+        __builtin_trap();
+    }
+
+    const T& at(const Key& key) const
+    {
+        const_iterator it = find(key);
+        if (it != end()) {
+            return it->second;
+        }
+        __builtin_trap();
+    }
+
     void insert(const value_type& value)
     {
         iterator it = find(value.first);

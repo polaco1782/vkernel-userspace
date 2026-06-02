@@ -18,6 +18,8 @@ struct array {
 
     constexpr reference operator[](size_type index) noexcept { return elements[index]; }
     constexpr const_reference operator[](size_type index) const noexcept { return elements[index]; }
+    constexpr reference at(size_type index) noexcept { return elements[index]; }
+    constexpr const_reference at(size_type index) const noexcept { return elements[index]; }
 
     constexpr iterator begin() noexcept { return data(); }
     constexpr const_iterator begin() const noexcept { return data(); }

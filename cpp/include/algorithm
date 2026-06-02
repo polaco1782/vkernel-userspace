@@ -1,6 +1,8 @@
 #ifndef VKCPP_ALGORITHM_H
 #define VKCPP_ALGORITHM_H
 
+#include <utility>
+
 namespace std {
 
 template <typename T>
@@ -20,6 +22,18 @@ void fill(Iterator first, Iterator last, const T& value)
     }
 }
 
+template <typename T>
+constexpr const T& min(const T& lhs, const T& rhs)
+{
+    return rhs < lhs ? rhs : lhs;
+}
+
+template <typename T>
+constexpr const T& max(const T& lhs, const T& rhs)
+{
+    return lhs < rhs ? rhs : lhs;
+}
+
 template <typename Iterator, typename T, typename Compare>
 Iterator lower_bound(Iterator first, Iterator last, const T& value, Compare compare)
 {
@@ -36,6 +50,48 @@ Iterator lower_bound(Iterator first, Iterator last, const T& value, Compare comp
         }
     }
     return first;
+}
+
+template <typename Iterator, typename Compare>
+void sort(Iterator first, Iterator last, Compare compare)
+{
+    for (Iterator it = first; it != last; ++it) {
+        Iterator best = it;
+        for (Iterator current = it + 1; current != last; ++current) {
+            if (compare(*current, *best)) {
+                best = current;
+            }
+        }
+        if (best != it) {
+            std::swap(*it, *best);
+        }
+    }
+}
+
+template <typename Iterator>
+void sort(Iterator first, Iterator last)
+{
+    sort(first, last, [](const auto& lhs, const auto& rhs) { return lhs < rhs; });
+}
+
+template <typename Iterator>
+Iterator unique(Iterator first, Iterator last)
+{
+    if (first == last) {
+        return last;
+    }
+
+    Iterator result = first;
+    for (Iterator current = first + 1; current != last; ++current) {
+        if (!(*result == *current)) {
+            ++result;
+            if (result != current) {
+                *result = std::move(*current);
+            }
+        }
+    }
+
+    return ++result;
 }
 
 }  // namespace std

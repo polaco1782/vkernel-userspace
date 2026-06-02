@@ -6,6 +6,7 @@
 #include "launch_registry.h"
 #include "plugin_registry.h"
 #include "task_manager_panel.h"
+#include "text_editor_panel.h"
 #include "vkfm_panel.h"
 #include "window_manager.h"
 
@@ -142,6 +143,7 @@ auto ShellUi::current_settings_snapshot() const -> PersistedSettings
     settings.show_task_manager = show_task_manager_;
     settings.show_kobj = show_kobj_;
     settings.show_vkfm = show_vkfm_;
+    settings.show_text_editor = show_text_editor_;
     return settings;
 }
 
@@ -166,6 +168,7 @@ void ShellUi::apply_saved_settings(const PersistedSettings& settings)
     show_task_manager_ = settings.show_task_manager;
     show_kobj_ = settings.show_kobj;
     show_vkfm_ = settings.show_vkfm;
+    show_text_editor_ = settings.show_text_editor;
 }
 
 void ShellUi::apply_style()
@@ -321,6 +324,7 @@ void ShellUi::draw_menu_bar(PluginHost& plugin_host, PanelRegistry& panel_regist
         ImGui::MenuItem("Task Manager", nullptr, &show_task_manager_);
         ImGui::MenuItem("KObj Navigator", nullptr, &show_kobj_);
         ImGui::MenuItem("vkfm", nullptr, &show_vkfm_);
+        ImGui::MenuItem("Text Editor", nullptr, &show_text_editor_);
         if (panel_registry.size() > 0) {
             ImGui::Separator();
             panel_registry.draw_menu_items();
@@ -594,6 +598,7 @@ void ShellUi::draw(PluginHost& plugin_host,
                    PanelRegistry& panel_registry,
                    TaskManagerPanel& task_manager,
                    KobjNavigator& kobj_navigator,
+                   TextEditorPanel& text_editor,
                    VkfmPanel& vkfm_panel)
 {
     draw_menu_bar(plugin_host, panel_registry);
@@ -602,6 +607,7 @@ void ShellUi::draw(PluginHost& plugin_host,
     task_manager.draw_window(show_task_manager_, plugin_host.window_manager);
     kobj_navigator.draw_window(show_kobj_, plugin_host.window_manager);
     vkfm_panel.draw_window(show_vkfm_, plugin_host.window_manager, plugin_host.log);
+    text_editor.draw_window(show_text_editor_, plugin_host.window_manager, plugin_host.log);
     panel_registry.draw_windows(plugin_host);
     plugin_host.window_manager.draw_windows();
     draw_settings_window(plugin_host.window_manager, plugin_host.log);

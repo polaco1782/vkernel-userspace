@@ -13,6 +13,7 @@
 #include "plugin_registry.h"
 #include "shell_ui.h"
 #include "task_manager_panel.h"
+#include "text_editor_panel.h"
 #include "vkfm_panel.h"
 #include "window_manager.h"
 
@@ -78,6 +79,7 @@ int main(int /*argc*/, char** /*argv*/)
         vkgui::LaunchRegistry launch_registry;
         vkgui::TaskManagerPanel task_manager;
         vkgui::KobjNavigator kobj_navigator;
+        vkgui::TextEditorPanel text_editor;
         vkgui::VkfmPanel vkfm_panel;
         vkgui::PanelRegistry panel_registry;
         vkgui::WindowManager window_manager(log);
@@ -144,6 +146,7 @@ int main(int /*argc*/, char** /*argv*/)
                     panel_registry,
                     task_manager,
                     kobj_navigator,
+                    text_editor,
                     vkfm_panel);
 
             /* Render notifications with the active popup styling so they

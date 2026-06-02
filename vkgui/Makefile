@@ -26,6 +26,7 @@ IMGUI_DIR       := ./deps/imgui
 IMPLOT_DIR      := ./deps/implot
 SQLITE_DIR      := ./deps/sqlite3
 NOTIFY_DIR      := ./deps/imguinotify
+TEXTEDITOR_DIR  := ./deps/imguicolortextedit
 PLUGIN_DIR      := ./plugins
 RUNTIME_PLUGIN_DIR := ./runtime_plugins
 
@@ -57,6 +58,7 @@ CXXFLAGS  += -I$(IMGUI_DIR)
 CXXFLAGS  += -I$(IMPLOT_DIR)
 CXXFLAGS  += -I$(SQLITE_DIR)
 CXXFLAGS  += -I$(NOTIFY_DIR)
+CXXFLAGS  += -I$(TEXTEDITOR_DIR)
 CXXFLAGS  += -I.
 # Disable multi-viewport notification positioning (requires docking branch)
 CXXFLAGS  += -DNOTIFY_RENDER_OUTSIDE_MAIN_WINDOW=0
@@ -152,6 +154,12 @@ IMPLOT_SRCS :=                         \
 IMPLOT_OBJS := $(IMPLOT_SRCS:.cpp=.o)
 IMPLOT_DEPS := $(IMPLOT_OBJS:.o=.d)
 
+TEXTEDITOR_SRCS :=                     \
+	$(TEXTEDITOR_DIR)/TextEditor.cpp
+
+TEXTEDITOR_OBJS := $(TEXTEDITOR_SRCS:.cpp=.o)
+TEXTEDITOR_DEPS := $(TEXTEDITOR_OBJS:.o=.d)
+
 SQLITE_SRCS := $(SQLITE_DIR)/sqlite3.c
 SQLITE_OBJS := $(SQLITE_SRCS:.c=.o)
 SQLITE_DEPS := $(SQLITE_OBJS:.o=.d)
@@ -170,14 +178,15 @@ OUR_SRCS   := console_log.cpp        \
 			  sqlite_db.cpp          \
 			  theme_scheme.cpp       \
 			  task_manager_panel.cpp \
+			  text_editor_panel.cpp  \
 			  vkfm_panel.cpp         \
 			  window_manager.cpp     \
 			  $(PLUGIN_SRCS)
 OUR_OBJS   := $(OUR_SRCS:.cpp=.o)
 OUR_DEPS   := $(OUR_OBJS:.o=.d)
 
-ALL_OBJS   := $(IMGUI_OBJS) $(IMPLOT_OBJS) $(SQLITE_OBJS) $(OUR_OBJS)
-ALL_DEPS   := $(IMGUI_DEPS) $(IMPLOT_DEPS) $(SQLITE_DEPS) $(OUR_DEPS)
+ALL_OBJS   := $(IMGUI_OBJS) $(IMPLOT_OBJS) $(TEXTEDITOR_OBJS) $(SQLITE_OBJS) $(OUR_OBJS)
+ALL_DEPS   := $(IMGUI_DEPS) $(IMPLOT_DEPS) $(TEXTEDITOR_DEPS) $(SQLITE_DEPS) $(OUR_DEPS)
 
 TARGET     := vkgui.vbin
 
@@ -185,7 +194,7 @@ TARGET     := vkgui.vbin
 
 .PHONY: all clean distclean help libc_build cpp_build runtime_plugins_build
 
-all: _check_imgui _check_implot _check_sysroot runtime_plugins_build $(TARGET)
+all: _check_imgui _check_implot _check_texteditor _check_sysroot runtime_plugins_build $(TARGET)
 
 help:
 	@echo "vkgui build targets:"
@@ -214,6 +223,13 @@ _check_implot:
 	      echo "  Restore the tracked deps/implot/ tree."; \
 	      echo ""; exit 1; }
 
+_check_texteditor:
+	@test -f $(TEXTEDITOR_DIR)/TextEditor.h || \
+	    { echo ""; \
+	      echo "  ERROR: vendored ImGuiColorTextEdit sources not found in $(TEXTEDITOR_DIR)/"; \
+	      echo "  Restore the tracked deps/imguicolortextedit/ tree."; \
+	      echo ""; exit 1; }
+
 _check_sysroot:
 	@test -f $(SYSROOT)/include/stdio.h || \
 	    { echo ""; \
@@ -230,6 +246,10 @@ $(IMGUI_DIR)/%.o: $(IMGUI_DIR)/%.cpp
 $(IMPLOT_DIR)/%.o: $(IMPLOT_DIR)/%.cpp
 	@echo "  CXX [implot] $(<F)"
 	@$(CXX) $(IMPLOT_CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
+
+$(TEXTEDITOR_DIR)/%.o: $(TEXTEDITOR_DIR)/%.cpp
+	@echo "  CXX [textedit] $(<F)"
+	@$(CXX) $(IMGUI_CXXFLAGS) $(DEPFLAGS) -MF $(@:.o=.d) -c $< -o $@
 
 $(SQLITE_DIR)/%.o: $(SQLITE_DIR)/%.c
 	@echo "  CC  [sqlite] $(<F)"

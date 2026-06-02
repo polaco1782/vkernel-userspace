@@ -139,6 +139,70 @@ inline auto trim_ascii(vk::string_view text) -> std::string
     return string_from_view(subview(text, start, end - start));
 }
 
+inline auto read_file_bytes(vk::string_view path, std::string& bytes) -> bool
+{
+    bytes.clear();
+
+    const std::string path_string = string_from_view(path);
+    const vk_usize expected_size = VK_CALL(file_size, path_string.c_str());
+    const vk_file_handle_t handle = VK_CALL(file_open, path_string.c_str(), "r");
+    if (handle == static_cast<vk_file_handle_t>(0)) {
+        return false;
+    }
+
+    if (expected_size != 0) {
+        bytes.resize(expected_size);
+        vk_usize total = 0;
+        while (total < expected_size) {
+            const vk_usize count = VK_CALL(file_read_handle,
+                                           handle,
+                                           bytes.data() + total,
+                                           expected_size - total);
+            if (count == 0) {
+                break;
+            }
+            total += count;
+        }
+        bytes.resize(total);
+    } else {
+        std::array<char, 512> chunk {};
+        for (;;) {
+            const vk_usize count = VK_CALL(file_read_handle, handle, chunk.data(), chunk.size());
+            if (count == 0) {
+                break;
+            }
+            bytes.append(chunk.data(), count);
+        }
+    }
+
+    const int close_result = VK_CALL(file_close, handle);
+    return close_result == 0;
+}
+
+inline auto write_file_bytes(vk::string_view path, vk::string_view bytes) -> bool
+{
+    const std::string path_string = string_from_view(path);
+    const vk_file_handle_t handle = VK_CALL(file_open, path_string.c_str(), "w");
+    if (handle == static_cast<vk_file_handle_t>(0)) {
+        return false;
+    }
+
+    vk_usize total = 0;
+    while (total < bytes.size()) {
+        const vk_usize count = VK_CALL(file_write_handle,
+                                       handle,
+                                       bytes.data() + total,
+                                       bytes.size() - total);
+        if (count == 0) {
+            break;
+        }
+        total += count;
+    }
+
+    const int close_result = VK_CALL(file_close, handle);
+    return total == bytes.size() && close_result == 0;
+}
+
 inline auto find_substring(vk::string_view text, vk::string_view needle) -> vk_usize
 {
     if (needle.empty()) {

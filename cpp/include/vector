@@ -109,6 +109,10 @@ public:
     const_iterator begin() const noexcept { return data_; }
     iterator end() noexcept { return data_ + size_; }
     const_iterator end() const noexcept { return data_ + size_; }
+    iterator rbegin() noexcept { return size_ == 0 ? data_ : data_ + size_ - 1; }
+    const_iterator rbegin() const noexcept { return size_ == 0 ? data_ : data_ + size_ - 1; }
+    iterator rend() noexcept { return data_ == nullptr ? nullptr : data_ - 1; }
+    const_iterator rend() const noexcept { return data_ == nullptr ? nullptr : data_ - 1; }
 
     pointer data() noexcept { return data_; }
     const_pointer data() const noexcept { return data_; }
@@ -119,6 +123,8 @@ public:
 
     reference operator[](size_type index) noexcept { return data_[index]; }
     const_reference operator[](size_type index) const noexcept { return data_[index]; }
+    reference at(size_type index) noexcept { return data_[index]; }
+    const_reference at(size_type index) const noexcept { return data_[index]; }
 
     reference front() noexcept { return data_[0]; }
     const_reference front() const noexcept { return data_[0]; }
@@ -226,6 +232,72 @@ public:
         destroy_range(dst, static_cast<size_type>(end() - dst));
         size_ -= count;
         return first;
+    }
+
+    iterator insert(iterator pos, const T& value)
+    {
+        const size_type index = static_cast<size_type>(pos - begin());
+        reserve_for_one_more();
+        pos = begin() + index;
+
+        for (iterator it = end(); it != pos; --it) {
+            std::construct_at(it, std::move(*(it - 1)));
+            std::destroy_at(it - 1);
+        }
+
+        std::construct_at(pos, value);
+        ++size_;
+        return pos;
+    }
+
+    iterator insert(iterator pos, T&& value)
+    {
+        const size_type index = static_cast<size_type>(pos - begin());
+        reserve_for_one_more();
+        pos = begin() + index;
+
+        for (iterator it = end(); it != pos; --it) {
+            std::construct_at(it, std::move(*(it - 1)));
+            std::destroy_at(it - 1);
+        }
+
+        std::construct_at(pos, std::move(value));
+        ++size_;
+        return pos;
+    }
+
+    template <typename InputIt>
+    iterator insert(iterator pos, InputIt first, InputIt last)
+    {
+        const size_type index = static_cast<size_type>(pos - begin());
+        size_type count = 0;
+        for (InputIt it = first; it != last; ++it) {
+            ++count;
+        }
+        if (count == 0) {
+            return begin() + index;
+        }
+
+        reserve(size_ + count);
+        pos = begin() + index;
+
+        if (size_ != 0 && pos != end()) {
+            for (iterator it = end() - 1; it >= pos; --it) {
+                std::construct_at(it + count, std::move(*it));
+                std::destroy_at(it);
+                if (it == pos) {
+                    break;
+                }
+            }
+        }
+
+        iterator out = pos;
+        for (InputIt it = first; it != last; ++it, ++out) {
+            std::construct_at(out, *it);
+        }
+
+        size_ += count;
+        return pos;
     }
 
     void swap(vector& other) noexcept

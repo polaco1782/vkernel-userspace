@@ -43,6 +43,9 @@ struct pair {
 
     pair() : first(), second() {}
     pair(const T1& a, const T2& b) : first(a), second(b) {}
+
+    template <typename U1, typename U2>
+    pair(U1&& a, U2&& b) : first(std::forward<U1>(a)), second(std::forward<U2>(b)) {}
 };
 
 template <typename T1, typename T2>
@@ -55,6 +58,54 @@ template <typename Container>
 constexpr auto size(const Container& container) -> decltype(container.size())
 {
     return container.size();
+}
+
+template <typename Container>
+constexpr auto begin(Container& container) -> decltype(container.begin())
+{
+    return container.begin();
+}
+
+template <typename Container>
+constexpr auto begin(const Container& container) -> decltype(container.begin())
+{
+    return container.begin();
+}
+
+template <typename T, size_t N>
+constexpr T* begin(T (&array)[N]) noexcept
+{
+    return array;
+}
+
+template <typename T, size_t N>
+constexpr const T* begin(const T (&array)[N]) noexcept
+{
+    return array;
+}
+
+template <typename Container>
+constexpr auto end(Container& container) -> decltype(container.end())
+{
+    return container.end();
+}
+
+template <typename Container>
+constexpr auto end(const Container& container) -> decltype(container.end())
+{
+    return container.end();
+}
+
+template <typename T, size_t N>
+constexpr T* end(T (&array)[N]) noexcept
+{
+    return array + N;
+}
+
+template <typename T, size_t N>
+constexpr const T* end(const T (&array)[N]) noexcept
+{
+    return array + N;
 }
 
 template <typename T, size_t N>

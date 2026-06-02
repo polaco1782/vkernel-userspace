@@ -58,6 +58,31 @@ public:
     {
         return nanoseconds(ns_ - other.ns_);
     }
+
+    friend constexpr bool operator>(const time_point& lhs, const time_point& rhs) noexcept
+    {
+        return lhs.ns_ > rhs.ns_;
+    }
+
+    friend constexpr bool operator<(const time_point& lhs, const time_point& rhs) noexcept
+    {
+        return lhs.ns_ < rhs.ns_;
+    }
+
+    friend constexpr bool operator>=(const time_point& lhs, const time_point& rhs) noexcept
+    {
+        return lhs.ns_ >= rhs.ns_;
+    }
+
+    friend constexpr bool operator<=(const time_point& lhs, const time_point& rhs) noexcept
+    {
+        return lhs.ns_ <= rhs.ns_;
+    }
+
+    friend constexpr auto operator+(const time_point& lhs, const milliseconds& rhs) noexcept -> time_point
+    {
+        return time_point(lhs.ns_ + rhs.count_ * 1'000'000LL);
+    }
 };
 
 // ---- system_clock ---------------------------------------------------------

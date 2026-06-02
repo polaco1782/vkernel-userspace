@@ -9,6 +9,9 @@ using ::abs;
 using ::ceil;
 using ::cos;
 using ::floor;
+using ::fmod;
+using ::log10;
+using ::round;
 using ::sin;
 using ::sqrt;
 

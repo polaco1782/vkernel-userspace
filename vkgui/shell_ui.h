@@ -11,6 +11,7 @@ class KobjNavigator;
 class PanelRegistry;
 struct PluginHost;
 class TaskManagerPanel;
+class TextEditorPanel;
 class VkfmPanel;
 class WindowManager;
 
@@ -28,6 +29,7 @@ public:
               PanelRegistry& panel_registry,
               TaskManagerPanel& task_manager,
               KobjNavigator& kobj_navigator,
+              TextEditorPanel& text_editor,
               VkfmPanel& vkfm_panel);
 
 private:
@@ -54,6 +56,7 @@ private:
     bool show_task_manager_ = false;
     bool show_kobj_ = false;
     bool show_vkfm_ = false;
+    bool show_text_editor_ = false;
     bool open_about_ = false;
     vk_u32 default_app_width_ = 320;
     vk_u32 default_app_height_ = 200;

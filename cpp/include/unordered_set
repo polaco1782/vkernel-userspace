@@ -1,0 +1,13 @@
+#ifndef VKCPP_UNORDERED_SET_H
+#define VKCPP_UNORDERED_SET_H
+
+#include <set>
+
+namespace std {
+
+template <typename Key, typename Hash = void, typename KeyEqual = void>
+using unordered_set = set<Key>;
+
+}  // namespace std
+
+#endif  // VKCPP_UNORDERED_SET_H
