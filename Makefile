@@ -69,7 +69,7 @@ endif
 
 USERSPACE_BUILD_STAMP := .build/userspace$(if $(DEBUG),-debug,).stamp
 
-.PHONY: all clean distclean newlib-setup libc-glue FORCE
+.PHONY: all clean distclean runtime-setup newlib-setup libc-glue FORCE
 
 all: $(USERSPACE_BUILD_STAMP)
 
@@ -86,6 +86,9 @@ $(USERSPACE_SYMBOLS_DIR)/%.lines: % $(ROOT_DIR)/scripts/generate_line_map.sh
 	@echo "  LINES   $@"
 	@mkdir -p $(dir $@)
 	@bash $(ROOT_DIR)/scripts/generate_line_map.sh $< $@
+
+runtime-setup:
+	@bash $(ROOT_DIR)/scripts/setup_userspace_runtime.sh
 
 newlib-setup:
 	@if [ ! -f $(SYSROOT_DIR)/lib/libc.a ] || \

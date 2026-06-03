@@ -26,106 +26,226 @@
 #include <errno.h>
 #include <reent.h>
 #include <stdarg.h>
+#include <time.h>
 
 #include "../include/vk.h"
 
-/* ============================================================
- * File-descriptor table
- *
- * newlib's stdio operates on integer file descriptors.  The vkernel
- * kernel uses opaque vk_file_handle_t (u64) handles.  We maintain a
- * small mapping table.  Descriptors 0-2 are reserved for stdin,
- * stdout, stderr and are handled specially (console I/O).
- * ============================================================ */
+#ifndef PROT_NONE
+#define PROT_NONE 0
+#endif
+#ifndef PROT_READ
+#define PROT_READ 0x1
+#endif
+#ifndef PROT_WRITE
+#define PROT_WRITE 0x2
+#endif
+#ifndef PROT_EXEC
+#define PROT_EXEC 0x4
+#endif
+#ifndef MAP_PRIVATE
+#define MAP_PRIVATE 0x02
+#endif
+#ifndef MAP_FIXED
+#define MAP_FIXED 0x10
+#endif
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS 0x20
+#endif
+#ifndef MAP_FAILED
+#define MAP_FAILED ((void*)-1)
+#endif
+#ifndef SEEK_SET
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+#endif
 
-#define VK_MAX_FDS   64
-#define VK_FD_STDIN   0
-#define VK_FD_STDOUT  1
-#define VK_FD_STDERR  2
-
-typedef struct {
-    vk_file_handle_t handle;
-    vk_u64           inode;
-    int              in_use;
-} vk_fd_entry_t;
-
-static vk_fd_entry_t _fd_table[VK_MAX_FDS] = {
-    [VK_FD_STDIN]  = { 0, 1 },
-    [VK_FD_STDOUT] = { 0, 1 },
-    [VK_FD_STDERR] = { 0, 1 },
-};
-
-static int _fd_alloc(vk_file_handle_t h)
+static int _vk_errno_to_host(int err)
 {
-    for (int i = 3; i < VK_MAX_FDS; ++i) {
-        if (!_fd_table[i].in_use) {
-            _fd_table[i].handle = h;
-            _fd_table[i].inode = 0;
-            _fd_table[i].in_use = 1;
-            return i;
-        }
+    switch (err) {
+        case VK_ERR_PERM: return EPERM;
+        case VK_ERR_NOENT: return ENOENT;
+        case VK_ERR_SRCH: return ESRCH;
+        case VK_ERR_INTR: return EINTR;
+        case VK_ERR_IO: return EIO;
+        case VK_ERR_NXIO: return ENXIO;
+        case VK_ERR_2BIG: return E2BIG;
+        case VK_ERR_NOEXEC: return ENOEXEC;
+        case VK_ERR_BADF: return EBADF;
+        case VK_ERR_CHILD: return ECHILD;
+        case VK_ERR_AGAIN: return EAGAIN;
+        case VK_ERR_NOMEM: return ENOMEM;
+        case VK_ERR_ACCES: return EACCES;
+        case VK_ERR_FAULT: return EFAULT;
+        case VK_ERR_BUSY: return EBUSY;
+        case VK_ERR_EXIST: return EEXIST;
+        case VK_ERR_XDEV: return EXDEV;
+        case VK_ERR_NODEV: return ENODEV;
+        case VK_ERR_NOTDIR: return ENOTDIR;
+        case VK_ERR_ISDIR: return EISDIR;
+        case VK_ERR_INVAL: return EINVAL;
+        case VK_ERR_NFILE: return ENFILE;
+        case VK_ERR_MFILE: return EMFILE;
+        case VK_ERR_NOTTY: return ENOTTY;
+        case VK_ERR_FBIG: return EFBIG;
+        case VK_ERR_NOSPC: return ENOSPC;
+        case VK_ERR_SPIPE: return ESPIPE;
+        case VK_ERR_ROFS: return EROFS;
+        case VK_ERR_MLINK: return EMLINK;
+        case VK_ERR_PIPE: return EPIPE;
+        case VK_ERR_RANGE: return ERANGE;
+        case VK_ERR_NOSYS: return ENOSYS;
+        case VK_ERR_NOTEMPTY: return ENOTEMPTY;
+        case VK_ERR_LOOP: return ELOOP;
+#ifdef ENODATA
+        case VK_ERR_NODATA: return ENODATA;
+#else
+        case VK_ERR_NODATA: return ENOENT;
+#endif
+        default: return EIO;
     }
+}
+
+static int _vk_ret(vk_i64 ret)
+{
+    if (ret >= 0) {
+        return (int)ret;
+    }
+
+    errno = _vk_errno_to_host((int)(-ret));
     return -1;
 }
 
-static void _fd_free(int fd)
+static ssize_t _vk_ret_ssize(vk_i64 ret)
 {
-    if (fd >= 3 && fd < VK_MAX_FDS) {
-        _fd_table[fd].in_use = 0;
-        _fd_table[fd].handle = 0;
-        _fd_table[fd].inode = 0;
+    if (ret >= 0) {
+        return (ssize_t)ret;
+    }
+
+    errno = _vk_errno_to_host((int)(-ret));
+    return -1;
+}
+
+static int _translate_open_flags(int flags)
+{
+    int vk_flags = 0;
+
+    switch (flags & O_ACCMODE) {
+        case O_WRONLY:
+            vk_flags |= VK_O_WRONLY;
+            break;
+        case O_RDWR:
+            vk_flags |= VK_O_RDWR;
+            break;
+        case O_RDONLY:
+        default:
+            vk_flags |= VK_O_RDONLY;
+            break;
+    }
+
+    if ((flags & O_CREAT) != 0) {
+        vk_flags |= VK_O_CREAT;
+    }
+    if ((flags & O_TRUNC) != 0) {
+        vk_flags |= VK_O_TRUNC;
+    }
+    if ((flags & O_APPEND) != 0) {
+        vk_flags |= VK_O_APPEND;
+    }
+
+    return vk_flags;
+}
+
+static int _translate_seek_whence(int whence)
+{
+    switch (whence) {
+        case SEEK_SET: return VK_SEEK_SET;
+        case SEEK_CUR: return VK_SEEK_CUR;
+        case SEEK_END: return VK_SEEK_END;
+        default: return -1;
     }
 }
 
-static int _fd_valid(int fd)
+static int _translate_fcntl_cmd(int cmd)
 {
-    return fd >= 0 && fd < VK_MAX_FDS && _fd_table[fd].in_use;
+    switch (cmd) {
+        case F_GETFD: return VK_F_GETFD;
+        case F_SETFD: return VK_F_SETFD;
+        case F_GETFL: return VK_F_GETFL;
+        case F_SETFL: return VK_F_SETFL;
+        case F_GETLK: return VK_F_GETLK;
+        case F_SETLK: return VK_F_SETLK;
+        case F_SETLKW: return VK_F_SETLKW;
+        default: return -1;
+    }
 }
 
-static vk_u64 _path_inode(const char* path)
+static int _translate_open_flags_back(int vk_flags)
 {
-    const unsigned char* cur = (const unsigned char*)path;
-    vk_u64 hash = 1469598103934665603ull;
+    int flags = 0;
 
-    if (!cur) {
-        return 1;
+    switch (vk_flags & VK_O_ACCMODE) {
+        case VK_O_WRONLY:
+            flags |= O_WRONLY;
+            break;
+        case VK_O_RDWR:
+            flags |= O_RDWR;
+            break;
+        case VK_O_RDONLY:
+        default:
+            flags |= O_RDONLY;
+            break;
     }
 
-    while (*cur != '\0') {
-        hash ^= (vk_u64)(*cur++);
-        hash *= 1099511628211ull;
+    if ((vk_flags & VK_O_CREAT) != 0) {
+        flags |= O_CREAT;
+    }
+    if ((vk_flags & VK_O_TRUNC) != 0) {
+        flags |= O_TRUNC;
+    }
+    if ((vk_flags & VK_O_APPEND) != 0) {
+        flags |= O_APPEND;
     }
 
-    return hash != 0 ? hash : 1;
+    return flags;
 }
 
-static int _fd_size(int fd, off_t* out_size)
+static int _translate_prot_flags(int prot)
 {
-    if (!_fd_valid(fd) || out_size == 0) {
-        errno = out_size == 0 ? EFAULT : EBADF;
-        return -1;
+    int vk_prot = 0;
+    if ((prot & PROT_READ) != 0) {
+        vk_prot |= VK_PROT_READ;
     }
+    if ((prot & PROT_WRITE) != 0) {
+        vk_prot |= VK_PROT_WRITE;
+    }
+    if ((prot & PROT_EXEC) != 0) {
+        vk_prot |= VK_PROT_EXEC;
+    }
+    return vk_prot;
+}
 
-    const vk_file_handle_t handle = _fd_table[fd].handle;
-    const vk_i64 original = VK_CALL(file_tell, handle);
-    if (original < 0) {
-        errno = EIO;
-        return -1;
+static int _translate_mmap_flags(int flags)
+{
+    int vk_flags = 0;
+    if ((flags & MAP_PRIVATE) != 0) {
+        vk_flags |= VK_MAP_PRIVATE;
     }
-    if (VK_CALL(file_seek, handle, 0, 2) != 0) {
-        errno = EIO;
-        return -1;
+#ifdef MAP_FIXED
+    if ((flags & MAP_FIXED) != 0) {
+        vk_flags |= VK_MAP_FIXED;
     }
-
-    const vk_i64 end = VK_CALL(file_tell, handle);
-    const int restore_rc = VK_CALL(file_seek, handle, original, 0);
-    if (end < 0 || restore_rc != 0) {
-        errno = EIO;
-        return -1;
+#endif
+#ifdef MAP_ANONYMOUS
+    if ((flags & MAP_ANONYMOUS) != 0) {
+        vk_flags |= VK_MAP_ANONYMOUS;
     }
-
-    *out_size = (off_t)end;
-    return 0;
+#elif defined(MAP_ANON)
+    if ((flags & MAP_ANON) != 0) {
+        vk_flags |= VK_MAP_ANONYMOUS;
+    }
+#endif
+    return vk_flags;
 }
 
 /* ============================================================
@@ -220,7 +340,7 @@ int _kill(int pid, int sig)
 
 int _getpid(void)
 {
-    return 1;
+    return _vk_ret(vk_syscall(VK_SYS_GETPID, 0, 0, 0, 0, 0, 0));
 }
 
 /* ============================================================
@@ -229,191 +349,106 @@ int _getpid(void)
 
 int _open(const char* path, int flags, ...)
 {
-    if (!path) {
-        errno = EFAULT;
-        return -1;
-    }
-
-    /*
-     * Translate POSIX flags to a simple mode string.
-     * newlib's _open uses O_RDONLY=0, O_WRONLY=1, O_RDWR=2, O_CREAT etc.
-     * We map conservatively; the kernel side is simple enough.
-     */
-    const char* vk_mode = "r";
-    const int accmode = flags & O_ACCMODE;
-    const int wants_create = (flags & O_CREAT) != 0;
-    const int wants_truncate = (flags & O_TRUNC) != 0;
-    const int wants_append = (flags & O_APPEND) != 0;
-
-    if (wants_append) {
-        vk_mode = accmode == O_RDWR ? "a+" : "a";
-    } else if (wants_truncate) {
-        vk_mode = accmode == O_RDWR ? "w+" : "w";
-    } else if (wants_create && accmode == O_RDWR) {
-        /* SQLite opens databases as O_RDWR|O_CREAT but only wants a truncate
-           on first creation. Preserve existing contents when the file exists. */
-        vk_mode = VK_CALL(file_exists, path) ? "r+" : "w+";
-    } else if (accmode == O_WRONLY) {
-        vk_mode = "w";
-    } else if (accmode == O_RDWR) {
-        vk_mode = "r+";
-    }
-
-    vk_file_handle_t h = VK_CALL(file_open, path, vk_mode);
-    if (h == 0) {
-        errno = ENOENT;
-        return -1;
-    }
-
-    int fd = _fd_alloc(h);
-    if (fd < 0) {
-        VK_CALL(file_close, h);
-        errno = EMFILE;
-        return -1;
-    }
-
-    _fd_table[fd].inode = _path_inode(path);
-
-    return fd;
+    const int vk_flags = _translate_open_flags(flags);
+    return _vk_ret(vk_syscall(VK_SYS_OPEN,
+                              (vk_u64)(vk_usize)path,
+                              (vk_u64)(unsigned)vk_flags,
+                              0,
+                              0,
+                              0,
+                              0));
 }
 
 int _close(int fd)
 {
-    if (fd <= VK_FD_STDERR) return 0;   /* never close std streams */
-
-    if (!_fd_valid(fd)) {
-        errno = EBADF;
-        return -1;
-    }
-
-    int rc = VK_CALL(file_close, _fd_table[fd].handle);
-    _fd_free(fd);
-    return rc;
+    return _vk_ret(vk_syscall(VK_SYS_CLOSE, (vk_u64)(unsigned)fd, 0, 0, 0, 0, 0));
 }
 
 int _read(int fd, char* buf, int len)
 {
     if (len <= 0) return 0;
-
-    /* stdin — character-at-a-time from console */
-    if (fd == VK_FD_STDIN) {
-        for (int i = 0; i < len; ++i) {
-            char c = VK_CALL(getc);
-            buf[i] = c;
-            if (c == '\n' || c == '\r')
-                return i + 1;
-        }
-        return len;
-    }
-
-    if (!_fd_valid(fd)) {
-        errno = EBADF;
-        return -1;
-    }
-
-    vk_usize n = VK_CALL(file_read_handle, _fd_table[fd].handle, buf, (vk_usize)len);
-    return (int)n;
+    return (int)_vk_ret_ssize(vk_syscall(VK_SYS_READ,
+                                         (vk_u64)(unsigned)fd,
+                                         (vk_u64)(vk_usize)buf,
+                                         (vk_u64)(unsigned)len,
+                                         0,
+                                         0,
+                                         0));
 }
 
 int _write(int fd, const char* buf, int len)
 {
     if (len <= 0) return 0;
-
-    /* stdout / stderr → console */
-    if (fd == VK_FD_STDOUT || fd == VK_FD_STDERR) {
-        if (vk_get_api()->vk_stdio_write) {
-            return (int)vk_get_api()->vk_stdio_write(buf, (vk_usize)len);
-        }
-
-        for (int i = 0; i < len; ++i) {
-            VK_CALL(putc, buf[i]);
-        }
-        return len;
-    }
-
-    if (!_fd_valid(fd)) {
-        errno = EBADF;
-        return -1;
-    }
-
-    vk_usize n = VK_CALL(file_write_handle, _fd_table[fd].handle, buf, (vk_usize)len);
-    return (int)n;
+    return (int)_vk_ret_ssize(vk_syscall(VK_SYS_WRITE,
+                                         (vk_u64)(unsigned)fd,
+                                         (vk_u64)(vk_usize)buf,
+                                         (vk_u64)(unsigned)len,
+                                         0,
+                                         0,
+                                         0));
 }
 
 int _lseek(int fd, int offset, int whence)
 {
-    if (fd <= VK_FD_STDERR) {
-        errno = ESPIPE;
-        return -1;
-    }
-
-    if (!_fd_valid(fd)) {
-        errno = EBADF;
-        return -1;
-    }
-
-    int rc = VK_CALL(file_seek, _fd_table[fd].handle, (vk_i64)offset, whence);
-    if (rc != 0) {
+    const int vk_whence = _translate_seek_whence(whence);
+    if (vk_whence < 0) {
         errno = EINVAL;
         return -1;
     }
 
-    vk_i64 pos = VK_CALL(file_tell, _fd_table[fd].handle);
-    return (int)pos;
+    return _vk_ret(vk_syscall(VK_SYS_LSEEK,
+                              (vk_u64)(unsigned)fd,
+                              (vk_u64)(vk_i64)offset,
+                              (vk_u64)(unsigned)vk_whence,
+                              0,
+                              0,
+                              0));
 }
 
 int _fstat(int fd, struct stat* st)
 {
-    if (!st) {
-        errno = EFAULT;
+    vk_stat_t vk_st;
+    if (_vk_ret(vk_syscall(VK_SYS_FSTAT,
+                           (vk_u64)(unsigned)fd,
+                           (vk_u64)(vk_usize)&vk_st,
+                           0,
+                           0,
+                           0,
+                           0)) < 0) {
         return -1;
     }
 
     *st = (struct stat){0};
-
-    if (fd <= VK_FD_STDERR) {
-        st->st_mode = S_IFCHR;
-        return 0;
-    }
-
-    if (!_fd_valid(fd)) {
-        errno = EBADF;
-        return -1;
-    }
-
-    if (_fd_size(fd, &st->st_size) != 0) {
-        return -1;
-    }
-
-    st->st_mode = S_IFREG | 0666;
-    st->st_nlink = 1;
-    st->st_blksize = 512;
-    st->st_dev = 1;
-    st->st_ino = (ino_t)_fd_table[fd].inode;
+    st->st_dev = (dev_t)vk_st.st_dev;
+    st->st_ino = (ino_t)vk_st.st_ino;
+    st->st_size = (off_t)vk_st.st_size;
+    st->st_mode = (mode_t)vk_st.st_mode;
+    st->st_nlink = (nlink_t)vk_st.st_nlink;
+    st->st_blksize = (blksize_t)vk_st.st_blksize;
     return 0;
 }
 
 int _stat(const char* path, struct stat* st)
 {
-    if (!path || !st) {
-        errno = EFAULT;
+    vk_stat_t vk_st;
+    if (_vk_ret(vk_syscall(VK_SYS_STAT,
+                           (vk_u64)(vk_usize)path,
+                           (vk_u64)(vk_usize)&vk_st,
+                           0,
+                           0,
+                           0,
+                           0)) < 0) {
         return -1;
     }
 
     *st = (struct stat){0};
-
-    if (VK_CALL(file_exists, path)) {
-        st->st_mode = S_IFREG | 0666;
-        st->st_size = (off_t)VK_CALL(file_size, path);
-        st->st_nlink = 1;
-        st->st_blksize = 512;
-        st->st_dev = 1;
-        st->st_ino = (ino_t)_path_inode(path);
-        return 0;
-    }
-
-    errno = ENOENT;
-    return -1;
+    st->st_dev = (dev_t)vk_st.st_dev;
+    st->st_ino = (ino_t)vk_st.st_ino;
+    st->st_size = (off_t)vk_st.st_size;
+    st->st_mode = (mode_t)vk_st.st_mode;
+    st->st_nlink = (nlink_t)vk_st.st_nlink;
+    st->st_blksize = (blksize_t)vk_st.st_blksize;
+    return 0;
 }
 
 int _link(const char* old, const char* new_path)
@@ -426,17 +461,18 @@ int _link(const char* old, const char* new_path)
 
 int _unlink(const char* path)
 {
-    if (!path) {
-        errno = EFAULT;
-        return -1;
-    }
-
-    return VK_CALL(file_remove, path);
+    return _vk_ret(vk_syscall(VK_SYS_UNLINK,
+                              (vk_u64)(vk_usize)path,
+                              0,
+                              0,
+                              0,
+                              0,
+                              0));
 }
 
 int _isatty(int fd)
 {
-    return (fd <= VK_FD_STDERR) ? 1 : 0;
+    return (fd >= 0 && fd <= 2) ? 1 : 0;
 }
 
 /* ============================================================
@@ -447,14 +483,80 @@ int _isatty(int fd)
 
 int _gettimeofday(struct timeval* tv, void* tz)
 {
-    (void)tz;
+    vk_timeval_t vk_tv = {0};
+    const vk_i64 ret = vk_syscall(VK_SYS_GETTIMEOFDAY,
+                                  (vk_u64)(vk_usize)(tv ? &vk_tv : 0),
+                                  (vk_u64)(vk_usize)tz,
+                                  0,
+                                  0,
+                                  0,
+                                  0);
+    if (_vk_ret(ret) < 0) {
+        return -1;
+    }
     if (tv) {
-        vk_u64 ticks = VK_CALL(tick_count);
-        vk_u32 tps   = VK_CALL(ticks_per_sec);
-        tv->tv_sec  = (time_t)(ticks / tps);
-        tv->tv_usec = (suseconds_t)((ticks % tps) * 1000000 / tps);
+        tv->tv_sec = (time_t)vk_tv.tv_sec;
+        tv->tv_usec = (suseconds_t)vk_tv.tv_usec;
     }
     return 0;
+}
+
+int clock_gettime(clockid_t clock_id, struct timespec* tp)
+{
+    vk_timespec_t vk_ts = {0};
+    if (_vk_ret(vk_syscall(VK_SYS_CLOCK_GETTIME,
+                           (vk_u64)(unsigned long)clock_id,
+                           (vk_u64)(vk_usize)(tp ? &vk_ts : 0),
+                           0,
+                           0,
+                           0,
+                           0)) < 0) {
+        return -1;
+    }
+
+    if (tp) {
+        tp->tv_sec = (time_t)vk_ts.tv_sec;
+        tp->tv_nsec = (long)vk_ts.tv_nsec;
+    }
+    return 0;
+}
+
+void* mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+    const vk_i64 ret = vk_syscall(VK_SYS_MMAP,
+                                  (vk_u64)(vk_usize)addr,
+                                  (vk_u64)length,
+                                  (vk_u64)(unsigned)_translate_prot_flags(prot),
+                                  (vk_u64)(unsigned)_translate_mmap_flags(flags),
+                                  (vk_u64)(vk_i64)fd,
+                                  (vk_u64)(vk_i64)offset);
+    if (ret < 0) {
+        errno = _vk_errno_to_host((int)(-ret));
+        return MAP_FAILED;
+    }
+    return (void*)(vk_usize)ret;
+}
+
+int munmap(void* addr, size_t length)
+{
+    return _vk_ret(vk_syscall(VK_SYS_MUNMAP,
+                              (vk_u64)(vk_usize)addr,
+                              (vk_u64)length,
+                              0,
+                              0,
+                              0,
+                              0));
+}
+
+int mprotect(void* addr, size_t length, int prot)
+{
+    return _vk_ret(vk_syscall(VK_SYS_MPROTECT,
+                              (vk_u64)(vk_usize)addr,
+                              (vk_u64)length,
+                              (vk_u64)(unsigned)_translate_prot_flags(prot),
+                              0,
+                              0,
+                              0));
 }
 
 clock_t _times(struct tms* buf)
@@ -471,15 +573,13 @@ clock_t _times(struct tms* buf)
 
 int access(const char* path, int mode)
 {
-    (void)mode;
-
-    struct stat st = {0};
-    if (stat(path, &st) == 0) {
-        return 0;
-    }
-
-    errno = ENOENT;
-    return -1;
+    return _vk_ret(vk_syscall(VK_SYS_ACCESS,
+                              (vk_u64)(vk_usize)path,
+                              (vk_u64)(unsigned)mode,
+                              0,
+                              0,
+                              0,
+                              0));
 }
 
 int fsync(int fd)
@@ -495,20 +595,18 @@ int fsync(int fd)
 
 int ftruncate(int fd, off_t length)
 {
-    if (!_fd_valid(fd)) {
-        errno = EBADF;
-        return -1;
-    }
     if (length < 0) {
         errno = EINVAL;
         return -1;
     }
 
-    if (VK_CALL(file_truncate, _fd_table[fd].handle, (vk_i64)length) != 0) {
-        errno = EIO;
-        return -1;
-    }
-    return 0;
+    return _vk_ret(vk_syscall(VK_SYS_FTRUNCATE,
+                              (vk_u64)(unsigned)fd,
+                              (vk_u64)(vk_i64)length,
+                              0,
+                              0,
+                              0,
+                              0));
 }
 
 int fchmod(int fd, mode_t mode)
@@ -548,69 +646,74 @@ uid_t geteuid(void)
 
 char* getcwd(char* buf, size_t size)
 {
-    if (buf == 0 || size < 2) {
-        errno = ERANGE;
+    if (_vk_ret(vk_syscall(VK_SYS_GETCWD,
+                           (vk_u64)(vk_usize)buf,
+                           (vk_u64)size,
+                           0,
+                           0,
+                           0,
+                           0)) < 0) {
         return 0;
     }
-
-    buf[0] = '/';
-    buf[1] = '\0';
     return buf;
 }
 
 ssize_t pread(int fd, void* buf, size_t nbytes, off_t offset)
 {
-    const int original = lseek(fd, 0, 1);
-    if (original < 0) {
-        return -1;
-    }
-    if (lseek(fd, (int)offset, 0) < 0) {
-        return -1;
-    }
-
-    const int read_count = read(fd, buf, (int)nbytes);
-    (void)lseek(fd, original, 0);
-    return read_count;
+    return _vk_ret_ssize(vk_syscall(VK_SYS_PREAD,
+                                    (vk_u64)(unsigned)fd,
+                                    (vk_u64)(vk_usize)buf,
+                                    (vk_u64)nbytes,
+                                    (vk_u64)(vk_i64)offset,
+                                    0,
+                                    0));
 }
 
 ssize_t pwrite(int fd, const void* buf, size_t nbytes, off_t offset)
 {
-    const int original = lseek(fd, 0, 1);
-    if (original < 0) {
-        return -1;
-    }
-    if (lseek(fd, (int)offset, 0) < 0) {
-        return -1;
-    }
-
-    const int write_count = write(fd, buf, (int)nbytes);
-    (void)lseek(fd, original, 0);
-    return write_count;
+    return _vk_ret_ssize(vk_syscall(VK_SYS_PWRITE,
+                                    (vk_u64)(unsigned)fd,
+                                    (vk_u64)(vk_usize)buf,
+                                    (vk_u64)nbytes,
+                                    (vk_u64)(vk_i64)offset,
+                                    0,
+                                    0));
 }
 
 int fcntl(int fd, int cmd, ...)
 {
-    (void)fd;
-
     va_list args;
     va_start(args, cmd);
-
-    if (cmd == F_GETLK) {
-        struct flock* lock = va_arg(args, struct flock*);
-        if (lock != 0) {
-            lock->l_type = F_UNLCK;
-        }
-        va_end(args);
-        return 0;
+    void* arg = 0;
+    if (cmd == F_GETLK || cmd == F_SETLK || cmd == F_SETLKW) {
+        arg = va_arg(args, void*);
+    } else if (cmd == F_SETFD || cmd == F_SETFL) {
+        arg = (void*)(vk_usize)va_arg(args, int);
     }
-
     va_end(args);
 
-    if (cmd == F_GETFL) {
-        return O_RDWR;
+    const int vk_cmd = _translate_fcntl_cmd(cmd);
+    if (vk_cmd < 0) {
+        errno = EINVAL;
+        return -1;
     }
 
-    return 0;
+    const vk_i64 ret = vk_syscall(VK_SYS_FCNTL,
+                                  (vk_u64)(unsigned)fd,
+                                  (vk_u64)(unsigned)vk_cmd,
+                                  (vk_u64)(vk_usize)arg,
+                                  0,
+                                  0,
+                                  0);
+    if (ret < 0) {
+        errno = _vk_errno_to_host((int)(-ret));
+        return -1;
+    }
+
+    if (cmd == F_GETFL) {
+        return _translate_open_flags_back((int)ret);
+    }
+    return (int)ret;
 }
 
 ssize_t readlink(const char* path, char* buf, size_t bufsize)

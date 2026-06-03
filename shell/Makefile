@@ -13,6 +13,7 @@ CPP_DIR        := ../cpp
 CPP_INCLUDE    := ../cpp/include
 CPP_RUNTIME_LIB := $(CPP_DIR)/libvkcpp.a
 DEBUG_ARG      := $(if $(DEBUG),DEBUG=$(DEBUG),)
+ELF_CHECK      := ../../scripts/check_userspace_elf.sh
 BUILD_DIR      := .build
 OBJ_DIR        := $(BUILD_DIR)/obj
 APPLET_DIR     := applets
@@ -46,7 +47,7 @@ CXXFLAGS  += -I$(USER_INCLUDE)
 CXXFLAGS  += -I$(CPP_INCLUDE)
 
 LDFLAGS := -nostdlib
-LDFLAGS += -pie
+LDFLAGS += -static-pie
 LDFLAGS += -e _start
 LDFLAGS += -Wl,--build-id=none
 LDFLAGS += -Wl,-z,norelro
@@ -98,6 +99,7 @@ $(APPLET_REGISTRY_OBJ): $(APPLET_REGISTRY_SRC) $(APPLET_SRCS) $(APPLET_HEADER)
 $(TARGET): $(OBJS) $(CPP_RUNTIME_LIB)
 	@echo "  LD      $@"
 	@$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(CPP_RUNTIME_LIB)
+	@bash $(ELF_CHECK) $@
 	@echo "  SIZE    $@"
 	@size $@ 2>/dev/null || true
 

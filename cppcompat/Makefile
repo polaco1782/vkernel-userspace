@@ -45,6 +45,7 @@ LIBVKSYS        := $(LIBC_DIR)/libvksys.a
 CPP_RUNTIME_LIB := $(CPP_DIR)/libvkcpp.a
 LIBS            := -Wl,--start-group -lvkcpp -lvksys -lc -lm -lgcc -Wl,--end-group
 DEBUG_ARG       := $(if $(DEBUG),DEBUG=$(DEBUG),)
+ELF_CHECK       := ../../scripts/check_userspace_elf.sh
 
 TARGET := cppcompat.vbin
 OBJS   := main.o
@@ -70,6 +71,7 @@ $(CPP_RUNTIME_LIB):
 $(TARGET): $(OBJS) $(CRT0) $(LIBVKSYS) $(CPP_RUNTIME_LIB)
 	@echo "  LD      $@"
 	@$(CXX) $(LDFLAGS) -o $@ $(CRT0) $(OBJS) $(LIBS)
+	@bash $(ELF_CHECK) $@
 ifndef DEBUG
 	@echo "  STRIP   $@"
 	@$(STRIP) --strip-unneeded $@
