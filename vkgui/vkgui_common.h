@@ -117,7 +117,7 @@ inline auto string_equals(vk::string_view lhs, vk::string_view rhs) -> bool
 
 inline auto view_equals(vk::string_view lhs, vk::string_view rhs) -> bool
 {
-    return lhs.compare(rhs) == 0;
+    return lhs.compare(rhs);
 }
 
 inline auto string_equals(const std::string& lhs, vk::string_view rhs) -> bool
@@ -156,7 +156,7 @@ inline auto ends_with(vk::string_view text, vk::string_view suffix) -> bool
         return false;
     }
 
-    return subview(text, text.size() - suffix.size(), suffix.size()).compare(suffix) == 0;
+    return subview(text, text.size() - suffix.size(), suffix.size()).compare(suffix);
 }
 
 inline auto path_basename(vk::string_view path) -> vk::string_view

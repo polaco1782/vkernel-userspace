@@ -56,7 +56,8 @@ auto LaunchRegistry::load_from_bin_directory(ConsoleLog& log) -> bool
         std::string path = k_bin_directory_path;
         path.push_back('/');
         path += item.name;
-        add_app(string_view_of(path));
+        vk::string_view p = string_view_of(path);
+        add_app(p);
     }
 
     if (count_ == 0 && file_count > 0) {
@@ -72,7 +73,8 @@ auto LaunchRegistry::load_from_bin_directory(ConsoleLog& log) -> bool
 
 void LaunchRegistry::add_app(vk::string_view path)
 {
-    if (path.empty() || !is_vbin_program_path(string_from_view(path)) || count_ >= k_capacity || exists(path)) {
+    // Keep the launch menu stable when the directory scan returns duplicates or non-program entries.
+    if (path.empty() || !is_vbin_program_path(path) || count_ >= k_capacity || exists(path)) {
         return;
     }
 
