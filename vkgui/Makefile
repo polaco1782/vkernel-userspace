@@ -1,11 +1,11 @@
 # vkernel userspace - vkgui (Dear ImGui demo)
 # Copyright (C) 2026 vkernel authors
 #
-# Builds a static PIE binary linked against newlib + vkernel CRT.
+# Builds a static PIE binary linked against musl + the vkernel CRT bridge.
 #
 # Prerequisites:
-#   1.  Run  scripts/setup_newlib.sh   from the project root.
-#   2.  Run  make -C ../libc           to build crt0 + libvksys.
+#   1.  Run  scripts/setup_userspace_runtime.sh from the project root.
+#   2.  Run  make -C ../libc           to build crt0 + runtime_glue.
 #
 # Then just:   make          (release)
 #              make DEBUG=1  (debug, keeps symbols and -Og)
@@ -16,11 +16,14 @@ AR      ?= ar
 STRIP   ?= strip
 
 ROOT_DIR        := $(realpath $(CURDIR)/../..)
+USERSPACE_DIR   := $(realpath $(CURDIR)/..)
+include $(USERSPACE_DIR)/runtime_config.mk
+include $(USERSPACE_DIR)/cxx_runtime_config.mk
+
 USER_INCLUDE    := ../include
-SYSROOT         := ../sysroot
-LIBC_DIR        := ../libc
-CPP_DIR         := ../cpp
-CPP_INCLUDE     := $(CPP_DIR)/include
+HEADER_SYSROOT  := $(USERSPACE_HEADER_SYSROOT)
+LINK_SYSROOT    := $(USERSPACE_LINK_SYSROOT)
+LIBC_DIR        := $(USERSPACE_LIBC_DIR)
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
 IMGUI_DIR       := ./deps/imgui
 IMPLOT_DIR      := ./deps/implot
@@ -45,16 +48,15 @@ CXXFLAGS  += -m64
 CXXFLAGS  += -mno-red-zone
 CXXFLAGS  += -fno-exceptions
 CXXFLAGS  += -fno-rtti
-CXXFLAGS  += -nostdinc++
+CXXFLAGS  += $(USERSPACE_CXX_INCLUDE_FLAGS)
 ifdef DEBUG
 CXXFLAGS  += -Og -g3 -fno-omit-frame-pointer -DDEBUG
 else
 CXXFLAGS  += -O2 -DNDEBUG
 endif
 CXXFLAGS  += -Wall -Wextra
-CXXFLAGS  += -isystem $(SYSROOT)/include
+CXXFLAGS  += -isystem $(HEADER_SYSROOT)/include
 CXXFLAGS  += -I$(USER_INCLUDE)
-CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
 CXXFLAGS  += -I$(IMGUI_DIR)
 CXXFLAGS  += -I$(IMPLOT_DIR)
@@ -74,7 +76,7 @@ IMGUI_CXXFLAGS  += -Wno-missing-field-initializers
 IMGUI_CXXFLAGS  += -Wno-sign-compare
 IMGUI_CXXFLAGS  += -Wno-type-limits
 # Disable the default shell opener — it references execvp/waitpid which
-# are not available in our newlib/vkernel syscall stubs.
+# are not available in our current freestanding userspace runtime.
 IMGUI_CXXFLAGS  += -DIMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS
 
 # ImPlot is another third-party Dear ImGui extension; build it with the
@@ -96,7 +98,7 @@ endif
 SQLITE_CFLAGS += -Wall -Wextra
 SQLITE_CFLAGS += -Wno-unused-parameter
 SQLITE_CFLAGS += -Wno-unused-function
-SQLITE_CFLAGS += -isystem $(SYSROOT)/include
+SQLITE_CFLAGS += -isystem $(HEADER_SYSROOT)/include
 SQLITE_CFLAGS += -I$(USER_INCLUDE)
 SQLITE_CFLAGS += -I$(KERNEL_INCLUDE)
 SQLITE_CFLAGS += -I$(SQLITE_DIR)
@@ -118,14 +120,14 @@ LDFLAGS  += -e _start
 LDFLAGS  += -Wl,--build-id=none
 LDFLAGS  += -Wl,-z,norelro
 LDFLAGS  += -Wl,--gc-sections
-LDFLAGS  += -L$(SYSROOT)/lib
+LDFLAGS  += -L$(LINK_SYSROOT)/lib
 LDFLAGS  += -L$(LIBC_DIR)
-LDFLAGS  += -L$(CPP_DIR)
 
-CRT0     := $(LIBC_DIR)/crt0.o
-CPP_RUNTIME_LIB := $(CPP_DIR)/libvkcpp.a
-LIBVKSYS := $(LIBC_DIR)/libvksys.a
-LIBS     := -Wl,--start-group -lvkcpp -lvksys -lc -lm -lgcc -Wl,--end-group
+CRT0     := $(USERSPACE_RUNTIME_CRT0)
+CPP_RUNTIME_LIB := $(USERSPACE_CXX_RUNTIME_TARGET)
+RUNTIME_GLUE := $(USERSPACE_RUNTIME_GLUE_OBJ)
+CXX_MAIN_BRIDGE := $(USERSPACE_CXX_MAIN_BRIDGE_OBJ)
+LIBS     := -Wl,--start-group $(USERSPACE_CXX_RUNTIME_LIBS) $(USERSPACE_CXX_RUNTIME_SYSTEM_LIBS) -Wl,--end-group
 
 LIBC_MAKE_ARGS :=
 ifdef DEBUG
@@ -207,8 +209,8 @@ help:
 	@echo "  make distclean    – clean build outputs (vendored deps are kept)"
 	@echo ""
 	@echo "Required setup:"
-	@echo "  make -C ../libc             – build newlib glue (crt0, libvksys)"
-	@echo "  make -C ../cpp              – build the freestanding C++ runtime (optional; auto-built here)"
+	@echo "  make -C ../libc             – build crt0 + the shared runtime glue"
+	@echo "  make -C .. runtime-setup    – stage musl + libc++ into the runtime sysroot"
 
 # ---- Dependency guards --------------------------------------------------
 
@@ -248,10 +250,10 @@ _check_fonts:
 	      echo ""; exit 1; }
 
 _check_sysroot:
-	@test -f $(SYSROOT)/include/stdio.h || \
+	@test -f $(USERSPACE_RUNTIME_CHECK_FILE) || \
 	    { echo ""; \
-	      echo "  ERROR: newlib sysroot not found at $(SYSROOT)"; \
-	      echo "  Run:  bash ../../scripts/setup_newlib.sh"; \
+	      echo "  ERROR: $(USERSPACE_RUNTIME_DISPLAY) headers not found at $(HEADER_SYSROOT)"; \
+	      echo "  Run:  $(USERSPACE_RUNTIME_SETUP_HINT)"; \
 	      echo ""; exit 1; }
 
 # ---- Compilation rules --------------------------------------------------
@@ -280,12 +282,16 @@ libc_build:
 	@$(MAKE) -C $(LIBC_DIR) $(LIBC_MAKE_ARGS)
 
 cpp_build:
-	@$(MAKE) --no-print-directory -C $(CPP_DIR) CXX=$(CXX) AR=$(AR) $(CPP_MAKE_ARGS)
+	@test -f $(CPP_RUNTIME_LIB) || \
+	    { echo ""; \
+	      echo "  ERROR: $(USERSPACE_CXX_RUNTIME_DISPLAY) runtime archive not found at $(CPP_RUNTIME_LIB)"; \
+	      echo "  Run:  $(USERSPACE_CXX_RUNTIME_SETUP_HINT)"; \
+	      echo ""; exit 1; }
 
 runtime_plugins_build:
 	@$(MAKE) --no-print-directory -C $(RUNTIME_PLUGIN_DIR) CXX=$(CXX) $(CPP_MAKE_ARGS)
 
-$(CRT0) $(LIBVKSYS): libc_build
+$(CRT0) $(RUNTIME_GLUE) $(CXX_MAIN_BRIDGE): libc_build
 	@:
 
 $(CPP_RUNTIME_LIB): cpp_build
@@ -293,9 +299,9 @@ $(CPP_RUNTIME_LIB): cpp_build
 
 # ---- Link ---------------------------------------------------------------
 
-$(TARGET): $(CRT0) $(LIBVKSYS) $(CPP_RUNTIME_LIB) $(ALL_OBJS)
+$(TARGET): $(CRT0) $(RUNTIME_GLUE) $(CXX_MAIN_BRIDGE) $(CPP_RUNTIME_LIB) $(ALL_OBJS)
 	@echo "  LD          $@"
-	@$(CXX) $(LDFLAGS) -o $@ $(CRT0) $(ALL_OBJS) $(LIBS)
+	@$(CXX) $(LDFLAGS) -o $@ $(CRT0) $(RUNTIME_GLUE) $(CXX_MAIN_BRIDGE) $(ALL_OBJS) $(LIBS)
 ifndef DEBUG
 	@echo "  STRIP       $@"
 	@$(STRIP) --strip-unneeded $@

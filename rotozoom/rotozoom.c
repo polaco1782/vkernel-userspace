@@ -6,7 +6,7 @@
  * into a back buffer, then nearest-neighbour 2x stretches to the
  * real framebuffer on each flip — one pixel becomes a 2x2 block.
  *
- * Standard C (newlib) is used for all non-kernel operations.
+ * Standard C is used for all non-kernel operations.
  * vk_get_api() is used only for fb info, poll_key, and yield.
  */
 

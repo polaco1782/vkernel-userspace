@@ -608,7 +608,7 @@ void ShellUi::draw_about_modal()
         ImGui::TextWrapped("Software renderer: barycentric triangle fill,");
         ImGui::TextWrapped("alpha-8 font atlas, framebuffer blending.");
         ImGui::Spacing();
-        ImGui::TextWrapped("Keyboard-only navigation, newlib C runtime.");
+        ImGui::TextWrapped("Keyboard-only navigation, musl C runtime.");
         ImGui::Spacing();
         ImGui::Separator();
 

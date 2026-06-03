@@ -12,7 +12,7 @@
 #define PACKAGE_TARNAME    "chocolate-doom"
 #define PACKAGE_VERSION    "3.1.0"
 
-/* We have standard C string functions via newlib */
+/* We have standard C string functions via the userspace C runtime */
 #define HAVE_DECL_STRCASECMP  1
 #define HAVE_DECL_STRNCASECMP 1
 

@@ -1,7 +1,6 @@
 USERSPACE_BINARY_RELATIVE := \
 	hello/hello.vbin \
-	framebuffer/framebuffer.vbin \
-	framebuffer_text/framebuffer_text.vbin \
+	tls_smoke/tls_smoke.vbin \
 	raytracer/raytracer.vbin \
 	shell/shell.vbin \
 	doom/doom.vbin \
@@ -12,7 +11,6 @@ USERSPACE_BINARY_RELATIVE := \
 	rotozoom/rotozoom.vbin \
 	vkgui/vkgui.vbin \
 	sr_cube/sr_cube.vbin \
-	cppcompat/cppcompat.vbin \
 	vkobj/vkobj.vbin \
 	vnes/vnes.vbin \
 	snes9x/snes9x.vbin \

@@ -149,7 +149,7 @@ void *I_StartMultiGlob(const char *dir, int flags, const char *glob, ...) {
 /* ---- mkdir stub ---- */
 #include <sys/stat.h>
 #include <errno.h>
-/* newlib's x86_64-elf target may lack mkdir — provide a stub */
+/* The freestanding runtime still exposes mkdir through this local stub. */
 int mkdir(const char *path, mode_t mode) __attribute__((weak));
 int mkdir(const char *path, mode_t mode) {
     (void)path; (void)mode;

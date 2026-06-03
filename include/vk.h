@@ -4,10 +4,10 @@
  *
  * vk.h - Thin wrapper around the canonical kernel ABI header.
  *
- * With newlib providing the standard C library, this header only
+ * With musl providing the standard C library, this header only
  * exposes vkernel-specific APIs that have no C standard equivalent.
  * Standard functions (printf, malloc, memcpy, strlen, ...) come from
- * newlib's <stdio.h>, <stdlib.h>, <string.h>, etc.
+ * musl's <stdio.h>, <stdlib.h>, <string.h>, etc.
  */
 
 #ifndef VK_USERSPACE_H

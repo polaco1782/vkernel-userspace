@@ -49,8 +49,8 @@ static ImGui_ImplVK_Data* get_bd()
 }
 
 /* ================================================================
- * Custom allocators -- route through newlib malloc/free
- * (newlib's heap is bootstrapped from the kernel allocator via _sbrk)
+ * Custom allocators -- route through musl malloc/free
+ * (the userspace heap is bootstrapped from the kernel via brk/mmap)
  * ================================================================ */
 
 static void* vk_imgui_alloc(size_t sz, void*) { return malloc(sz); }
@@ -123,7 +123,7 @@ bool ImGui_ImplVK_Init(const vk_framebuffer_info_t* fb)
     bd->mouse_y       = (float)fb->height * 0.5f;
     bd->mouse_buttons = 0u;
 
-    /* Hook ImGui allocation through newlib so the kernel heap is used. */
+    /* Hook ImGui allocation through musl so the userspace heap is used. */
     ImGui::SetAllocatorFunctions(vk_imgui_alloc, vk_imgui_free);
 
     io.BackendPlatformName     = "imgui_impl_vk";
@@ -409,7 +409,6 @@ static inline void unpack_imgui_col(ImU32 col,
     }
 }
 
-__attribute__((optimize("O2")))
 static void blit_framebuffer_image(const ImGui_ImplVK_FramebufferImage* image,
                                    int clip_x0, int clip_y0, int clip_x1, int clip_y1,
                                    float scale_x, float scale_y,
@@ -476,7 +475,6 @@ static void blit_framebuffer_image(const ImGui_ImplVK_FramebufferImage* image,
  *   After:  1 rect * 250k pixels * (store) = 250k iters, zero tests
  * ================================================================ */
 
-__attribute__((optimize("O2")))
 static bool try_render_quad(
     const ImDrawVert* vtx, const ImDrawIdx* idx,
     int cx0, int cy0, int cx1, int cy1,
@@ -728,9 +726,7 @@ static inline unsigned char sample_alpha8(const unsigned char* tex,
  *     coverage/interpolation).
  *   - Opaque fast path: when combined alpha >= 1.0 (most UI fills and outlines)
  *     the destination pixel is not read and no blend multiply is needed.
- *   - Force O2 even in debug builds so QEMU stays interactive.
  */
-__attribute__((optimize("O2")))
 static void rasterize_triangle(
     const ImDrawVert& v0, const ImDrawVert& v1, const ImDrawVert& v2,
     int cx0, int cy0, int cx1, int cy1,
@@ -1083,7 +1079,6 @@ static void draw_cursor(unsigned int* buf, int W, int H, int S,
     draw_layer(base_x, base_y, fill_x, fill_y, IM_COL32(255, 255, 255, 255));
 }
 
-__attribute__((optimize("O2")))
 void ImGui_ImplVK_RenderDrawData(ImDrawData* draw_data,
                                   const vk_framebuffer_info_t* fb)
 {

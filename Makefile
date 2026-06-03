@@ -7,18 +7,18 @@ ROOT_DIR ?= $(abspath ..)
 ROOT_BUILD_DIR ?= $(abspath $(ROOT_DIR)/build)
 SYMBOLS_DIR := $(ROOT_BUILD_DIR)/symbols
 USERSPACE_SYMBOLS_DIR := $(SYMBOLS_DIR)/userspace
+USERSPACE_DIR := $(CURDIR)
+
+include runtime_config.mk
+include cxx_runtime_config.mk
 
 include artifacts.mk
 
 LIBC_DIR := libc
-SYSROOT_DIR := sysroot
-NEWLIB_BUILD_DIR := newlib-build
-NEWLIB_BUILD_LOG := $(NEWLIB_BUILD_DIR)/config.log
-NEWLIB_CFG_MAKEFILE := $(NEWLIB_BUILD_DIR)/x86_64-elf/newlib/Makefile
+SYSROOT_DIR := $(USERSPACE_ACTIVE_SYSROOT)
 
 HELLO_VBIN := hello/hello.vbin
-FRAMEBUFFER_VBIN := framebuffer/framebuffer.vbin
-FRAMEBUFFER_TEXT_VBIN := framebuffer_text/framebuffer_text.vbin
+TLS_SMOKE_VBIN := tls_smoke/tls_smoke.vbin
 RAYTRACER_VBIN := raytracer/raytracer.vbin
 SHELL_VBIN := shell/shell.vbin
 DOOM_VBIN := doom/doom.vbin
@@ -29,7 +29,6 @@ MINIMP3_VBIN := minimp3/minimp3.vbin
 ROTOZOOM_VBIN := rotozoom/rotozoom.vbin
 VKGUI_VBIN := vkgui/vkgui.vbin
 SR_CUBE_VBIN := sr_cube/sr_cube.vbin
-CPPCOMPAT_VBIN := cppcompat/cppcompat.vbin
 VKOBJ_VBIN := vkobj/vkobj.vbin
 VNES_VBIN := vnes/vnes.vbin
 SNES9X_VBIN := snes9x/snes9x.vbin
@@ -68,8 +67,9 @@ USERSPACE_BUILD_OUTPUTS += $(USERSPACE_LINE_MAPS)
 endif
 
 USERSPACE_BUILD_STAMP := .build/userspace$(if $(DEBUG),-debug,).stamp
+USERSPACE_RUNTIME_READY := $(USERSPACE_RUNTIME_LIBC_CHECK_FILE)
 
-.PHONY: all clean distclean runtime-setup newlib-setup libc-glue FORCE
+.PHONY: all clean distclean runtime-setup libc-glue FORCE
 
 all: $(USERSPACE_BUILD_STAMP)
 
@@ -87,22 +87,15 @@ $(USERSPACE_SYMBOLS_DIR)/%.lines: % $(ROOT_DIR)/scripts/generate_line_map.sh
 	@mkdir -p $(dir $@)
 	@bash $(ROOT_DIR)/scripts/generate_line_map.sh $< $@
 
-runtime-setup:
-	@bash $(ROOT_DIR)/scripts/setup_userspace_runtime.sh
+$(USERSPACE_RUNTIME_READY):
+	@USERSPACE_CXX_RUNTIME=$(USERSPACE_CXX_RUNTIME) bash $(ROOT_DIR)/scripts/setup_userspace_runtime.sh
 
-newlib-setup:
-	@if [ ! -f $(SYSROOT_DIR)/lib/libc.a ] || \
-	    grep -q -- '--disable-newlib-io-float' $(NEWLIB_BUILD_LOG) 2>/dev/null || \
-	    grep -q 'NO_FLOATING_POINT' $(NEWLIB_CFG_MAKEFILE) 2>/dev/null; then \
-		echo "  NEWLIB  Building sysroot..."; \
-		bash $(ROOT_DIR)/scripts/setup_newlib.sh; \
-	else \
-		echo "  NEWLIB  sysroot already built"; \
-	fi
+runtime-setup:
+	@USERSPACE_CXX_RUNTIME=$(USERSPACE_CXX_RUNTIME) bash $(ROOT_DIR)/scripts/setup_userspace_runtime.sh
 
 _DEBUG_FLAG := $(if $(DEBUG),DEBUG=$(DEBUG),)
 
-libc-glue: newlib-setup
+libc-glue: $(USERSPACE_RUNTIME_READY)
 	@$(MAKE) --no-print-directory -C $(LIBC_DIR) CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
 # Always descend into each app submake so the app-owned dependency graph decides
@@ -110,11 +103,8 @@ libc-glue: newlib-setup
 $(HELLO_VBIN): FORCE hello/hello.c hello/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C hello CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
-$(FRAMEBUFFER_VBIN): FORCE framebuffer/framebuffer.c framebuffer/Makefile
-	@$(MAKE) --no-print-directory -C framebuffer $(_DEBUG_FLAG)
-
-$(FRAMEBUFFER_TEXT_VBIN): FORCE framebuffer_text/framebuffer_text.c framebuffer_text/Makefile
-	@$(MAKE) --no-print-directory -C framebuffer_text $(_DEBUG_FLAG)
+$(TLS_SMOKE_VBIN): FORCE tls_smoke/main.cpp tls_smoke/Makefile libc-glue
+	@$(MAKE) --no-print-directory -C tls_smoke $(_DEBUG_FLAG)
 
 $(RAYTRACER_VBIN): FORCE raytracer/raytracer.c raytracer/Makefile
 	@$(MAKE) --no-print-directory -C raytracer $(_DEBUG_FLAG)
@@ -135,7 +125,7 @@ $(CLOWNMDEMU_VBIN): FORCE clownmdemu/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C clownmdemu CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
 $(MINIMP3_VBIN): FORCE minimp3/Makefile libc-glue
-	@$(MAKE) --no-print-directory -C minimp3 CC=$(CROSS_PREFIX)gcc CXX=$(CROSS_PREFIX)g++ $(_DEBUG_FLAG)
+	@$(MAKE) --no-print-directory -C minimp3 CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
 $(ROTOZOOM_VBIN): FORCE rotozoom/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C rotozoom CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
@@ -146,9 +136,6 @@ $(VKGUI_VBIN): FORCE $(wildcard vkgui/*.cpp) vkgui/Makefile libc-glue
 $(SR_CUBE_VBIN): FORCE sr_cube/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C sr_cube CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
-$(CPPCOMPAT_VBIN): FORCE cppcompat/main.cpp cppcompat/Makefile libc-glue
-	@$(MAKE) --no-print-directory -C cppcompat $(_DEBUG_FLAG)
-
 $(VKOBJ_VBIN): FORCE vkobj/main.cpp vkobj/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C vkobj $(_DEBUG_FLAG)
 
@@ -156,10 +143,10 @@ $(VNES_VBIN): FORCE $(wildcard vnes/*.cpp) vnes/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C vnes $(_DEBUG_FLAG)
 
 $(SNES9X_VBIN): FORCE snes9x/Makefile libc-glue
-	@$(MAKE) --no-print-directory -C snes9x CXX=$(CROSS_PREFIX)g++ CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
+	@$(MAKE) --no-print-directory -C snes9x CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
 $(VSPCPLAY_VBIN): FORCE vspcplay/Makefile libc-glue
-	@$(MAKE) --no-print-directory -C vspcplay CXX=$(CROSS_PREFIX)g++ CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
+	@$(MAKE) --no-print-directory -C vspcplay CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
 FORCE:
 
@@ -168,8 +155,7 @@ clean:
 	@rm -rf .build $(USERSPACE_SYMBOLS_DIR)
 	@$(MAKE) --no-print-directory -C $(LIBC_DIR) clean
 	@$(MAKE) --no-print-directory -C hello clean
-	@$(MAKE) --no-print-directory -C framebuffer clean
-	@$(MAKE) --no-print-directory -C framebuffer_text clean
+	@$(MAKE) --no-print-directory -C tls_smoke clean
 	@$(MAKE) --no-print-directory -C raytracer clean
 	@$(MAKE) --no-print-directory -C shell clean
 	@$(MAKE) --no-print-directory -C doom clean
@@ -178,8 +164,6 @@ clean:
 	@$(MAKE) --no-print-directory -C clownmdemu clean
 	@$(MAKE) --no-print-directory -C minimp3 clean
 	@$(MAKE) --no-print-directory -C rotozoom clean
-	@$(MAKE) --no-print-directory -C cpp clean
-	@$(MAKE) --no-print-directory -C cppcompat clean
 	@$(MAKE) --no-print-directory -C vkobj clean
 	@$(MAKE) --no-print-directory -C vkgui clean
 	@$(MAKE) --no-print-directory -C vnes clean
@@ -188,7 +172,6 @@ clean:
 	@$(MAKE) --no-print-directory -C sr_cube clean
 
 distclean: clean
-	@echo "Removing newlib sysroot and build..."
+	@echo "Removing userspace runtime sysroot and build..."
 	@$(MAKE) --no-print-directory -C $(LIBC_DIR) distclean
-	@bash $(ROOT_DIR)/scripts/setup_newlib.sh clean 2>/dev/null || true
-	@rm -rf $(SYSROOT_DIR)
+	@bash $(ROOT_DIR)/scripts/setup_userspace_runtime.sh clean 2>/dev/null || true

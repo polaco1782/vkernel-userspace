@@ -1,9 +1,12 @@
 CXX ?= g++
 
 ROOT_DIR       := $(realpath $(CURDIR)/../../..)
+USERSPACE_DIR  := $(ROOT_DIR)/userspace
+include $(USERSPACE_DIR)/runtime_config.mk
+include $(USERSPACE_DIR)/cxx_runtime_config.mk
+
 USER_INCLUDE   := $(ROOT_DIR)/userspace/include
-SYSROOT        := $(ROOT_DIR)/userspace/sysroot
-CPP_INCLUDE    := $(ROOT_DIR)/userspace/cpp/include
+SYSROOT        := $(USERSPACE_ACTIVE_SYSROOT)
 KERNEL_INCLUDE := $(ROOT_DIR)/include
 VKGUI_DIR       := $(ROOT_DIR)/userspace/vkgui
 
@@ -18,7 +21,7 @@ CXXFLAGS  += -m64
 CXXFLAGS  += -mno-red-zone
 CXXFLAGS  += -fno-exceptions
 CXXFLAGS  += -fno-rtti
-CXXFLAGS  += -nostdinc++
+CXXFLAGS  += $(USERSPACE_CXX_INCLUDE_FLAGS)
 ifdef DEBUG
 CXXFLAGS  += -Og -g3 -fno-omit-frame-pointer -DDEBUG
 else
@@ -27,7 +30,6 @@ endif
 CXXFLAGS  += -Wall -Wextra
 CXXFLAGS  += -isystem $(SYSROOT)/include
 CXXFLAGS  += -I$(USER_INCLUDE)
-CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
 CXXFLAGS  += -I$(VKGUI_DIR)
 

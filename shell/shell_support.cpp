@@ -3,7 +3,7 @@
  * Copyright (C) 2026 vkernel authors
  */
 
-#include "../include/vk.h"
+#include "../include/vkrt.h"
 #include "applets/applet.h"
 
 namespace {
@@ -171,7 +171,7 @@ auto query_default_path() -> std::string
 {
     char_buffer<kPathMax> out{};
 
-    if (vk_kobj_query("fs/root_path", out.data(), out.size(), nullptr) && out[0] != '\0') {
+    if (vkrt_kobj_query("fs/root_path", out.data(), out.size(), nullptr) && out[0] != '\0') {
         return std::string(out.data());
     }
 
@@ -290,8 +290,8 @@ auto resolve_program_path(const std::string& raw, std::string& out) -> bool
 auto directory_exists(const std::string& path) -> bool
 {
     char_buffer<128> response{};
-    vk_kobj_rpc_path_json("fs_list", path.c_str(), response.data(), response.size());
-    return vk_kobj_response_ok(response.data());
+    vkrt_kobj_rpc_path_json("fs_list", path.c_str(), response.data(), response.size());
+    return vkrt_kobj_response_ok(response.data());
 }
 
 /* Resolves and launches a userspace program, then waits for it to finish. */
@@ -316,7 +316,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
     }
 
     std::string resolved_path;
-    if (VK_CALL(file_exists, path.c_str())) {
+    if (vkrt_file_exists(path.c_str())) {
         resolved_path = path;
     } else {
         if (ends_with(path, ".vbin")) {
@@ -329,7 +329,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
         }
 
         path += ".vbin";
-        if (path.size() + 1 > kPathMax || !VK_CALL(file_exists, path.c_str())) {
+        if (path.size() + 1 > kPathMax || !vkrt_file_exists(path.c_str())) {
             if (verbose) {
                 std::cout << "run: program not found: ";
                 std::cout << program.text;
@@ -362,7 +362,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
         return -1;
     }
 
-    const vk_i64 task_id = vk_get_api()->vk_run_cmdline(resolved_cmdline.c_str());
+    const vk_i64 task_id = vkrt_run_cmdline(resolved_cmdline.c_str());
     if (task_id < 0) {
         if (verbose) {
             std::cout << "run: failed to launch ";
@@ -378,7 +378,7 @@ auto launch_program(const std::string& command_line, int verbose) -> int
         std::cout << "\n";
     }
 
-    VK_CALL(wait_task, task_id);
+    vkrt_wait_task(task_id);
     return 0;
 }
 

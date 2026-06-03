@@ -5,25 +5,18 @@
  * crt0.c - Entry point that bridges the vkernel ABI to libc startup.
  *
  * The kernel calls _start(const vk_api_t* api).  We store the API
- * pointer, perform minimal C runtime initialization (newlib init_array),
- * then call the user's main().
+ * pointer, build a musl-style argc/argv/envp/auxv block, and then
+ * hand control to libc startup.
  */
 
 #include "../include/vk.h"
 
-/* Provided by the user program.  Deliberately unprototyped so hosted and
- * musl-style main signatures both remain callable from this bridge. */
-extern int main();
+/* Provided by the runtime glue. C++ builds override it with a bridge object. */
+extern int __vkernel_call_main(int argc, char** argv) __attribute__((weak));
 
 /*
- * newlib constructor / destructor arrays.
- * __libc_init_array walks .preinit_array, .init, .init_array.
- * __libc_fini_array walks .fini_array, .fini.
- * These are defined in newlib's libc/misc/init.c and fini.c.
- *
- * When building against a bare-metal newlib (x86_64-elf) that does not
- * ship crtbegin/crtend objects, these symbols may be absent from libc.a.
- * We provide our own implementations that walk the ELF sections directly.
+ * Constructor / destructor array fallbacks for the direct-entry path.
+ * When libc startup is unavailable we still walk the ELF sections directly.
  */
 
 typedef void (*_func_ptr)(void);
@@ -34,6 +27,7 @@ extern _func_ptr __init_array_start[]    __attribute__((weak));
 extern _func_ptr __init_array_end[]      __attribute__((weak));
 extern _func_ptr __fini_array_start[]    __attribute__((weak));
 extern _func_ptr __fini_array_end[]      __attribute__((weak));
+extern void __cxa_finalize(void*) __attribute__((weak));
 
 #define VK_CMDLINE_MAX 256
 #define VK_ARGV_MAX    32
@@ -154,7 +148,10 @@ static void seed_aux_random(unsigned char out[16], const vk_process_image_info_t
 
 static int call_main_fallback(int argc, char** argv)
 {
-    return ((int (*)(int, char**))main)(argc, argv);
+    if (__vkernel_call_main != 0) {
+        return __vkernel_call_main(argc, argv);
+    }
+    return 0;
 }
 
 void __libc_init_array(void)
@@ -171,6 +168,9 @@ void __libc_init_array(void)
 
 void __libc_fini_array(void)
 {
+    if (__cxa_finalize) {
+        __cxa_finalize((void*)0);
+    }
     if (__fini_array_start) {
         for (_func_ptr *f = __fini_array_end - 1; f >= __fini_array_start; --f)
             (*f)();
@@ -262,10 +262,10 @@ int _start(const vk_api_t* api)
         auxv[aux_index++] = VK_AT_NULL;
         auxv[aux_index++] = 0;
 
-        return __libc_start_main(main, argc, runtime_argv, _init, _fini, 0);
+        return __libc_start_main((int (*)())__vkernel_call_main, argc, runtime_argv, _init, _fini, 0);
     }
 
-    /* 3. Transitional path for the current newlib runtime. */
+    /* 3. Fallback path for freestanding bring-up and debug builds. */
     __libc_init_array();
 
     int ret = call_main_fallback(argc, argv);

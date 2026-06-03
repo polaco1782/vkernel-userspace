@@ -3,21 +3,26 @@
 # Copyright (C) 1993-1996 Id Software, Inc.
 # Copyright (C) 2005-2014 Simon Howard (Chocolate Doom)
 #
-# Builds chocolate-doom as a static PIE binary linked against newlib + vkernel CRT.
-# Prerequisites: run scripts/setup_newlib.sh once, then make -C ../libc
+# Builds chocolate-doom as a static PIE binary linked against musl + the
+# vkernel CRT bridge. Prerequisites: run scripts/setup_userspace_runtime.sh
+# once, then make -C ../libc
 
 CC      ?= gcc
 AR      ?= ar
 OBJCOPY ?= objcopy
 
+USERSPACE_DIR  := $(realpath $(CURDIR)/..)
+include $(USERSPACE_DIR)/runtime_config.mk
+
 # Paths
 DOOM_SRC       := ../doom-src/src
 DOOM_GAME_SRC  := ../doom-src/src/doom
 USER_INCLUDE   := ../include
-SYSROOT        := ../sysroot
+SYSROOT        := $(USERSPACE_ACTIVE_SYSROOT)
 LIBC_DIR       := ../libc
 KERNEL_INCLUDE := ../../include
 SDL_SHIM       := sdl_shim
+ELF_CHECK      := ../../scripts/check_userspace_elf.sh
 
 # Compiler flags
 CFLAGS  := -std=c11
@@ -58,9 +63,10 @@ LDFLAGS += -Wl,--gc-sections
 LDFLAGS += -L$(SYSROOT)/lib
 LDFLAGS += -L$(LIBC_DIR)
 
-CRT0   := $(LIBC_DIR)/crt0.o
-LIBVKSYS := $(LIBC_DIR)/libvksys.a
-LIBS   := -Wl,--start-group -lvksys -lc -lm -lgcc -Wl,--end-group
+CRT0   := $(USERSPACE_RUNTIME_CRT0)
+RUNTIME_GLUE := $(USERSPACE_RUNTIME_GLUE_OBJ)
+C_MAIN_BRIDGE := $(USERSPACE_C_MAIN_BRIDGE_OBJ)
+LIBS   := -Wl,--start-group $(USERSPACE_RUNTIME_SYSTEM_LIBS) -Wl,--end-group
 
 # ---------- Source file lists ----------
 
@@ -200,7 +206,14 @@ TARGET := doom.vbin
 
 .PHONY: all clean distclean
 
-all: $(TARGET)
+all: _check_sysroot $(TARGET)
+
+_check_sysroot:
+	@test -f $(USERSPACE_RUNTIME_CHECK_FILE) || \
+	    { echo ""; \
+	      echo "  ERROR: $(USERSPACE_RUNTIME_DISPLAY) headers not found at $(SYSROOT)"; \
+	      echo "  Run:  $(USERSPACE_RUNTIME_SETUP_HINT)"; \
+	      echo ""; exit 1; }
 
 $(OBJ_DIR):
 	@mkdir -p $(OBJ_DIR)
@@ -225,9 +238,10 @@ $(OBJ_DIR)/%.o: %.c | $(OBJ_DIR)
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 # Link
-$(TARGET): $(ALL_OBJS) $(CRT0) $(LIBVKSYS)
+$(TARGET): $(ALL_OBJS) $(CRT0) $(RUNTIME_GLUE) $(C_MAIN_BRIDGE)
 	@echo "  LD      $@"
-	@$(CC) $(LDFLAGS) -o $@ $(CRT0) $(ALL_OBJS) $(LIBS)
+	@$(CC) $(LDFLAGS) -o $@ $(CRT0) $(RUNTIME_GLUE) $(C_MAIN_BRIDGE) $(ALL_OBJS) $(LIBS)
+	@bash $(ELF_CHECK) $@
 ifndef DEBUG
 	@strip --strip-unneeded $@
 endif

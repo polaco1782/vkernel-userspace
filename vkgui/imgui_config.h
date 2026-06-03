@@ -6,8 +6,8 @@
  *   -DIMGUI_USER_CONFIG=\"imgui_config.h\"
  *
  * Constraints:
- *  - Newlib provides the C standard library.
- *  - The in-repo userspace/cpp shim provides the freestanding C++ runtime.
+ *  - Musl provides the C standard library surface.
+ *  - libc++ provides the freestanding C++ runtime surface.
  *  - No exceptions, no RTTI.
  */
 

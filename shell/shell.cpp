@@ -8,7 +8,7 @@
  * Run:   launched automatically by the kernel as shell.elf / shell.exe
  */
 
-#include "../include/vk.h"
+#include "../include/vkrt.h"
 #include "applets/applet.h"
 
 #include <array>
@@ -126,31 +126,22 @@ static auto read_next_token(const std::string& input) -> parsed_token
 static auto shell_has_framebuffer() -> bool
 {
     vk_framebuffer_info_t fb{};
-    VK_CALL(framebuffer_info, &fb);
-    return fb.valid != 0;
+    return vkrt_framebuffer_info(&fb) && fb.valid != 0;
 }
 
-/* Checks whether the process command line includes a specific startup flag. */
-static auto shell_cmdline_has_flag(const char* flag) -> bool
+/* Checks whether the process argv includes a specific startup flag. */
+static auto shell_args_have_flag(int argc, char** argv, const char* flag) -> bool
 {
-    if (!vk_get_api()->vk_get_cmdline) {
+    if (argv == nullptr) {
         return false;
     }
 
-    char_buffer<kLineMax> cmdline{};
-    vk_get_api()->vk_get_cmdline(cmdline.data(), cmdline.size());
-
-    std::string remaining(cmdline.data());
-    while (true) {
-        const parsed_token token = read_next_token(remaining);
-        if (!token.valid) {
-            return false;
-        }
-        if (token.text == flag) {
+    for (int index = 1; index < argc; ++index) {
+        if (argv[index] != nullptr && std::string(argv[index]) == flag) {
             return true;
         }
-        remaining = token.rest;
     }
+    return false;
 }
 
 /* Adds a command to history while suppressing empty and duplicate entries. */
@@ -241,7 +232,7 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
     size_type old_len = 0;
 
     while (line.size() + 1 < max) {
-        const char ch = VK_CALL(getc);
+        const char ch = vkrt_getc();
 
         if (ch == '\r' || ch == '\n') {
             std::cout << '\n';
@@ -255,8 +246,8 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
         }
 
         if (ch == 27) {
-            const char c1 = VK_CALL(try_getc);
-            const char c2 = VK_CALL(try_getc);
+            const char c1 = vkrt_try_getc();
+            const char c2 = vkrt_try_getc();
             if (c1 == '[' && (c2 == 'A' || c2 == 'B')) {
                 if (c2 == 'A' && history_index > 0) {
                     --history_index;
@@ -361,7 +352,7 @@ static void run_script_line(const std::string& line)
 /* Streams and executes the optional shell startup script line by line. */
 static void read_startup_script()
 {
-    const vk_file_handle_t fh = VK_CALL(file_open, "/data/shell/shell.txt", "r");
+    const vk_file_handle_t fh = vkrt_file_open("/data/shell/shell.txt", "r");
     if (fh == static_cast<vk_file_handle_t>(0)) {
         std::cout << "No startup script found (/data/shell/shell.txt), skipping...\n";
         return;
@@ -371,7 +362,7 @@ static void read_startup_script()
     std::string line;
     size_type read_size = 0;
 
-    while ((read_size = VK_CALL(file_read_handle, fh, chunk.data(), chunk.size())) > 0) {
+    while ((read_size = vkrt_file_read_handle(fh, chunk.data(), chunk.size())) > 0) {
         for (char ch : std::span(chunk).first(read_size)) {
             if (ch == '\n') {
                 run_script_line(line);
@@ -389,7 +380,7 @@ static void read_startup_script()
         run_script_line(line);
     }
 
-    VK_CALL(file_close, fh);
+    vkrt_file_close(fh);
 }
 
 /* Prints the initial shell banner shown at process startup. */
@@ -404,9 +395,8 @@ static void print_banner()
 
 }  // namespace
 
-extern "C" int _start(const vk_api_t* api)
+int main(int argc, char** argv)
 {
-    vk_init(api);
     shell::init_paths();
 
     print_banner();
@@ -414,9 +404,8 @@ extern "C" int _start(const vk_api_t* api)
     const bool has_framebuffer = shell_has_framebuffer();
     int run_startup_script = 0;
 
-    if (vk_get_api()->vk_get_cmdline) {
-        run_startup_script = shell_cmdline_has_flag("--startup") ? 1 : 0;
-    } else {
+    run_startup_script = shell_args_have_flag(argc, argv, "--startup") ? 1 : 0;
+    if (argc <= 0) {
         run_startup_script = has_framebuffer ? 1 : 0;
     }
 

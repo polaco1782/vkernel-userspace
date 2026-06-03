@@ -11,8 +11,9 @@ HEADER_SYSROOT := $(USERSPACE_HEADER_SYSROOT)
 LINK_SYSROOT   := $(USERSPACE_LINK_SYSROOT)
 LIBC_DIR       := $(USERSPACE_LIBC_DIR)
 KERNEL_INCLUDE := ../../include
+ELF_CHECK      := ../../scripts/check_userspace_elf.sh
 
-CXXFLAGS  := -std=c++26
+CXXFLAGS  := -std=c++20
 CXXFLAGS  += -ffreestanding
 CXXFLAGS  += -fno-builtin
 CXXFLAGS  += -fno-stack-protector
@@ -47,9 +48,8 @@ CXX_MAIN_BRIDGE := $(USERSPACE_CXX_MAIN_BRIDGE_OBJ)
 CPP_RUNTIME_LIB := $(USERSPACE_CXX_RUNTIME_TARGET)
 LIBS            := -Wl,--start-group $(USERSPACE_CXX_RUNTIME_LIBS) $(USERSPACE_CXX_RUNTIME_SYSTEM_LIBS) -Wl,--end-group
 DEBUG_ARG       := $(if $(DEBUG),DEBUG=$(DEBUG),)
-ELF_CHECK       := ../../scripts/check_userspace_elf.sh
 
-TARGET := vkobj.vbin
+TARGET := tls_smoke.vbin
 OBJS   := main.o
 
 .PHONY: all clean

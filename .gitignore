@@ -10,13 +10,10 @@
 *.vplg
 
 # Generated runtime state
-newlib/
-newlib-build/
-sysroot/
+runtime/build/
+runtime/sysroot/
 
 # Program-specific generated files
-cpp/libvkcpp.a
-cpp/runtime/*.o
 doom/obj/
 libc/*.a
 libc/*.o

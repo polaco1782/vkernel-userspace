@@ -41,6 +41,13 @@ void runtime_demo_draw(const vkgui_plugin_host_api_t* host, vk_u32* visible, voi
         host->logf("Runtime demo plugin clicked %u time(s).",
                    static_cast<unsigned>(state->button_presses));
     }
+
+    if(host->button("CRASH VKGUI", 110.0f, 0.0f)) {
+        // crash by overwriting vkgui host API pointer with an invalid value and then calling through it
+        const_cast<vk_api_t*&>(host->vk_api) = reinterpret_cast<vk_api_t*>(0xDEADBEEF);
+        host->vk_api->vk_tick_count();
+    }
+
     host->same_line();
     host->textf("Clicks: %u", static_cast<unsigned>(state->button_presses));
 

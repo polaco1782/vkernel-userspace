@@ -16,8 +16,8 @@
  * - [OPT] Loop unrolling hints for compiler auto-vectorization
  * - [OPT] Spatial grid acceleration (simple uniform grid, portable)
  *
- * NOTE: All changes are freestanding/newlib compatible.
- *       No SIMD intrinsics used (newlib may lack full support).
+ * NOTE: All changes are freestanding-runtime compatible.
+ *       No SIMD intrinsics are required for the userspace C runtime.
  *       Compiler -O2/-O3 will auto-vectorize simple loops where possible.
  */
 

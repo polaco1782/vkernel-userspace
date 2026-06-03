@@ -2,16 +2,19 @@ CXX     ?= g++
 AR      ?= ar
 STRIP   ?= strip
 
+USERSPACE_DIR   := $(realpath $(CURDIR)/..)
+include $(USERSPACE_DIR)/runtime_config.mk
+include $(USERSPACE_DIR)/cxx_runtime_config.mk
+
 ROOT_DIR        := $(realpath $(CURDIR)/../..)
 USER_INCLUDE    := ../include
-SYSROOT         := ../sysroot
+SYSROOT         := $(USERSPACE_ACTIVE_SYSROOT)
 LIBC_DIR        := ../libc
-CPP_DIR         := ../cpp
-CPP_INCLUDE     := $(CPP_DIR)/include
 KERNEL_INCLUDE  := $(ROOT_DIR)/include
 VKGUI_DIR        := ../vkgui
 IMGUI_DIR       := $(VKGUI_DIR)/deps/imgui
 BUILD_DIR       := build
+ELF_CHECK       := ../../scripts/check_userspace_elf.sh
 
 DEPFLAGS := -MMD -MP
 
@@ -24,7 +27,7 @@ CXXFLAGS  += -m64
 CXXFLAGS  += -mno-red-zone
 CXXFLAGS  += -fno-exceptions
 CXXFLAGS  += -fno-rtti
-CXXFLAGS  += -nostdinc++
+CXXFLAGS  += $(USERSPACE_CXX_INCLUDE_FLAGS)
 ifdef DEBUG
 CXXFLAGS  += -Og -g3 -fno-omit-frame-pointer -DDEBUG
 else
@@ -33,7 +36,6 @@ endif
 CXXFLAGS  += -Wall -Wextra
 CXXFLAGS  += -isystem $(SYSROOT)/include
 CXXFLAGS  += -I$(USER_INCLUDE)
-CXXFLAGS  += -I$(CPP_INCLUDE)
 CXXFLAGS  += -I$(KERNEL_INCLUDE)
 CXXFLAGS  += -I$(VKGUI_DIR)
 CXXFLAGS  += -I$(IMGUI_DIR)
@@ -54,12 +56,12 @@ LDFLAGS  += -Wl,-z,norelro
 LDFLAGS  += -Wl,--gc-sections
 LDFLAGS  += -L$(SYSROOT)/lib
 LDFLAGS  += -L$(LIBC_DIR)
-LDFLAGS  += -L$(CPP_DIR)
 
-CRT0            := $(LIBC_DIR)/crt0.o
-CPP_RUNTIME_LIB := $(CPP_DIR)/libvkcpp.a
-LIBVKSYS        := $(LIBC_DIR)/libvksys.a
-LIBS            := -Wl,--start-group -lvkcpp -lvksys -lc -lm -lgcc -Wl,--end-group
+CRT0            := $(USERSPACE_RUNTIME_CRT0)
+CPP_RUNTIME_LIB := $(USERSPACE_CXX_RUNTIME_TARGET)
+RUNTIME_GLUE    := $(USERSPACE_RUNTIME_GLUE_OBJ)
+CXX_MAIN_BRIDGE := $(USERSPACE_CXX_MAIN_BRIDGE_OBJ)
+LIBS            := -Wl,--start-group $(USERSPACE_CXX_RUNTIME_LIBS) $(USERSPACE_CXX_RUNTIME_SYSTEM_LIBS) -Wl,--end-group
 
 CPP_MAKE_ARGS :=
 ifdef DEBUG
@@ -112,10 +114,10 @@ TARGET := vnes.vbin
 all: _check_sysroot $(TARGET)
 
 _check_sysroot:
-	@test -f $(SYSROOT)/include/stdio.h || \
+	@test -f $(USERSPACE_RUNTIME_CHECK_FILE) || \
 	    { echo ""; \
-	      echo "  ERROR: newlib sysroot not found at $(SYSROOT)"; \
-	      echo "  Run:  bash ../../scripts/setup_newlib.sh"; \
+	      echo "  ERROR: $(USERSPACE_RUNTIME_DISPLAY) headers not found at $(SYSROOT)"; \
+	      echo "  Run:  $(USERSPACE_RUNTIME_SETUP_HINT)"; \
 	      echo ""; exit 1; }
 
 $(BUILD_DIR)/%.o: %.cpp
@@ -137,17 +139,22 @@ libc_build:
 	@$(MAKE) -C $(LIBC_DIR) $(LIBC_MAKE_ARGS)
 
 cpp_build:
-	@$(MAKE) --no-print-directory -C $(CPP_DIR) CXX=$(CXX) AR=$(AR) $(CPP_MAKE_ARGS)
+	@test -f $(CPP_RUNTIME_LIB) || \
+	    { echo ""; \
+	      echo "  ERROR: $(USERSPACE_CXX_RUNTIME_DISPLAY) runtime archive not found at $(CPP_RUNTIME_LIB)"; \
+	      echo "  Run:  $(USERSPACE_CXX_RUNTIME_SETUP_HINT)"; \
+	      echo ""; exit 1; }
 
-$(CRT0) $(LIBVKSYS): libc_build
+$(CRT0) $(RUNTIME_GLUE) $(CXX_MAIN_BRIDGE): libc_build
 	@:
 
 $(CPP_RUNTIME_LIB): cpp_build
 	@:
 
-$(TARGET): $(CRT0) $(LIBVKSYS) $(CPP_RUNTIME_LIB) $(ALL_OBJS)
+$(TARGET): $(CRT0) $(RUNTIME_GLUE) $(CXX_MAIN_BRIDGE) $(CPP_RUNTIME_LIB) $(ALL_OBJS)
 	@echo "  LD      $@"
-	@$(CXX) $(LDFLAGS) -o $@ $(CRT0) $(ALL_OBJS) $(LIBS)
+	@$(CXX) $(LDFLAGS) -o $@ $(CRT0) $(RUNTIME_GLUE) $(CXX_MAIN_BRIDGE) $(ALL_OBJS) $(LIBS)
+	@bash $(ELF_CHECK) $@
 ifndef DEBUG
 	@echo "  STRIP   $@"
 	@$(STRIP) --strip-unneeded $@
