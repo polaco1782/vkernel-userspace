@@ -41,6 +41,11 @@ struct parsed_token {
 static std::array<std::string, kHistoryMax> s_history{};
 static size_type s_history_count = 0;
 
+static void shell_flush_output()
+{
+    std::cout.flush();
+}
+
 template <typename Fn>
 static void shell_for_each_command(Fn&& fn)
 {
@@ -177,6 +182,7 @@ static void shell_redraw_line(const char* prompt, const std::string& line, size_
     std::cout << '\r';
     std::cout << prompt;
     std::cout << line;
+    shell_flush_output();
 }
 
 /* Completes a command name or prints matching command candidates. */
@@ -207,6 +213,7 @@ static void shell_complete_line(std::string& line, size_type max, const char* pr
             line.push_back(' ');
             std::cout << ' ';
         }
+        shell_flush_output();
         return;
     }
 
@@ -221,6 +228,7 @@ static void shell_complete_line(std::string& line, size_type max, const char* pr
         std::cout << '\n';
         std::cout << prompt;
         std::cout << line;
+        shell_flush_output();
     }
 }
 
@@ -236,6 +244,7 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
 
         if (ch == '\r' || ch == '\n') {
             std::cout << '\n';
+            shell_flush_output();
             break;
         }
 
@@ -273,6 +282,7 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
             line.pop_back();
             std::cout << "\b \b";
             old_len = line.size();
+            shell_flush_output();
             continue;
         }
 
@@ -280,6 +290,7 @@ static auto console_getline(std::string& line, size_type max, const char* prompt
             line.push_back(ch);
             std::cout << ch;
             old_len = line.size();
+            shell_flush_output();
         }
     }
 
@@ -416,6 +427,7 @@ int main(int argc, char** argv)
     std::string line;
     for (;;) {
         std::cout << kPrompt;
+        shell_flush_output();
         if (console_getline(line, kLineMax, kPrompt) == 0) {
             continue;
         }

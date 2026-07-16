@@ -25,6 +25,7 @@ vnes/build/
 shell/.build/
 
 # Local content that should not be committed
+duke3d/duke3d.grp
 clownmdemu/roms/
 doom/doom1.wad
 doom/doom2.wad

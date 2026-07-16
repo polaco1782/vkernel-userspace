@@ -23,6 +23,7 @@ RAYTRACER_VBIN := raytracer/raytracer.vbin
 SHELL_VBIN := shell/shell.vbin
 DOOM_VBIN := doom/doom.vbin
 QUAKE_VBIN := quake/quake.vbin
+DUKE3D_VBIN := duke3d/duke3d.vbin
 MODPLAY_VBIN := MODPlay/modplay.vbin
 CLOWNMDEMU_VBIN := clownmdemu/clownmdemu.vbin
 MINIMP3_VBIN := minimp3/minimp3.vbin
@@ -52,6 +53,7 @@ USERSPACE_STAGE_ASSETS += $(wildcard rotozoom/head.bmp)
 USERSPACE_STAGE_ASSETS += $(wildcard quake/pak0.pak)
 USERSPACE_STAGE_ASSETS += $(wildcard quake/progs.dat)
 USERSPACE_STAGE_ASSETS += $(wildcard quake/zeus_pak0.pak)
+USERSPACE_STAGE_ASSETS += $(wildcard duke3d/*.grp)
 USERSPACE_STAGE_ASSETS += $(wildcard vkgui/runtime_plugins/*.vplg)
 USERSPACE_STAGE_ASSETS += $(wildcard quake/reaperfx)
 USERSPACE_STAGE_ASSETS += $(wildcard clownmdemu/roms)
@@ -118,6 +120,9 @@ $(DOOM_VBIN): FORCE doom/Makefile libc-glue
 $(QUAKE_VBIN): FORCE quake/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C quake CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
+$(DUKE3D_VBIN): FORCE duke3d/Makefile libc-glue
+	@$(MAKE) --no-print-directory -C duke3d CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
+
 $(MODPLAY_VBIN): FORCE MODPlay/Makefile libc-glue
 	@$(MAKE) --no-print-directory -C MODPlay CC=$(CROSS_PREFIX)gcc $(_DEBUG_FLAG)
 
@@ -160,6 +165,7 @@ clean:
 	@$(MAKE) --no-print-directory -C shell clean
 	@$(MAKE) --no-print-directory -C doom clean
 	@$(MAKE) --no-print-directory -C quake clean
+	@$(MAKE) --no-print-directory -C duke3d clean
 	@$(MAKE) --no-print-directory -C MODPlay clean
 	@$(MAKE) --no-print-directory -C clownmdemu clean
 	@$(MAKE) --no-print-directory -C minimp3 clean

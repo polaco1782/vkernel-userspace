@@ -5,6 +5,7 @@ USERSPACE_BINARY_RELATIVE := \
 	shell/shell.vbin \
 	doom/doom.vbin \
 	quake/quake.vbin \
+	duke3d/duke3d.vbin \
 	MODPlay/modplay.vbin \
 	clownmdemu/clownmdemu.vbin \
 	minimp3/minimp3.vbin \
